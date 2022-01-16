@@ -401,7 +401,6 @@ static void rtc_alarm_disable(struct rtc_device *rtc)
 
 	rtc->ops->alarm_irq_enable(rtc->dev.parent, false);
 }
-
 /* Called once per device from rtc_device_register */
 int rtc_initialize_alarm(struct rtc_device *rtc, struct rtc_wkalrm *alarm)
 {
@@ -430,10 +429,9 @@ int rtc_initialize_alarm(struct rtc_device *rtc, struct rtc_wkalrm *alarm)
 		rtc->aie_timer.enabled = 1;
 		timerqueue_add(&rtc->timerqueue, &rtc->aie_timer.node);
 	} else if (alarm->enabled && (rtc_tm_to_ktime(now).tv64 >=
-			rtc->aie_timer.node.expires.tv64)){
+			 rtc->aie_timer.node.expires.tv64)) {
 		rtc_alarm_disable(rtc);
 	}
-
 	mutex_unlock(&rtc->ops_lock);
 	return err;
 }
@@ -811,6 +809,7 @@ static int rtc_timer_enqueue(struct rtc_device *rtc, struct rtc_timer *timer)
 	}
 	return 0;
 }
+
 
 /**
  * rtc_timer_remove - Removes a rtc_timer from the rtc_device timerqueue

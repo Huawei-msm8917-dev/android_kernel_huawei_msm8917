@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2017,2019 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -2808,7 +2808,8 @@ static int ipa3_wan_rx_pyld_hdlr(struct sk_buff *skb,
 
 		IPA_STATS_INC_CNT(ipa3_ctx->stats.rx_pkts);
 		if (status.endp_dest_idx >= ipa3_ctx->ipa_num_pipes ||
-			status.endp_src_idx >= ipa3_ctx->ipa_num_pipes) {
+			status.endp_src_idx >= ipa3_ctx->ipa_num_pipes ||
+			status.pkt_len > IPA_GENERIC_AGGR_BYTE_LIMIT * 1024) {
 			IPAERR("status fields invalid\n");
 			WARN_ON(1);
 			goto bail;
@@ -2965,7 +2966,6 @@ static void ipa3_wq_rx_common(struct ipa3_sys_context *sys, u32 size)
 		WARN_ON(1);
 		return;
 	}
-	spin_lock_bh(&sys->spinlock);
 	rx_pkt_expected = list_first_entry(&sys->head_desc_list,
 					   struct ipa3_rx_pkt_wrapper,
 					   link);
@@ -2973,7 +2973,6 @@ static void ipa3_wq_rx_common(struct ipa3_sys_context *sys, u32 size)
 	sys->len--;
 	if (size)
 		rx_pkt_expected->len = size;
-	spin_unlock_bh(&sys->spinlock);
 	rx_skb = rx_pkt_expected->data.skb;
 	dma_unmap_single(ipa3_ctx->pdev, rx_pkt_expected->data.dma_addr,
 			sys->rx_buff_sz, DMA_FROM_DEVICE);

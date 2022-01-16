@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -462,31 +462,6 @@ static void ep_pcie_bar_init(struct ep_pcie_dev_t *dev)
 	ep_pcie_write_mask(dev->dm_core + PCIE20_MISC_CONTROL_1, BIT(0), 0);
 }
 
-static void ep_pcie_config_mmio(struct ep_pcie_dev_t *dev)
-{
-	EP_PCIE_DBG(dev,
-		"Initial version of MMIO is:0x%x\n",
-		readl_relaxed(dev->mmio + PCIE20_MHIVER));
-
-	if (dev->config_mmio_init) {
-		EP_PCIE_DBG(dev,
-			"PCIe V%d: MMIO already initialized, return\n",
-				dev->rev);
-		return;
-	}
-
-	ep_pcie_write_reg(dev->mmio, PCIE20_MHICFG, 0x02800880);
-	ep_pcie_write_reg(dev->mmio, PCIE20_BHI_EXECENV, 0x2);
-	ep_pcie_write_reg(dev->mmio, PCIE20_MHICTRL, 0x0);
-	ep_pcie_write_reg(dev->mmio, PCIE20_MHISTATUS, 0x0);
-	ep_pcie_write_reg(dev->mmio, PCIE20_MHIVER, 0x1000000);
-	ep_pcie_write_reg(dev->mmio, PCIE20_BHI_VERSION_LOWER, 0x2);
-	ep_pcie_write_reg(dev->mmio, PCIE20_BHI_VERSION_UPPER, 0x1);
-	ep_pcie_write_reg(dev->mmio, PCIE20_BHI_INTVEC, 0xffffffff);
-
-	dev->config_mmio_init = true;
-}
-
 static void ep_pcie_core_init(struct ep_pcie_dev_t *dev, bool configured)
 {
 	EP_PCIE_DBG(dev, "PCIe V%d\n", dev->rev);
@@ -543,9 +518,6 @@ static void ep_pcie_core_init(struct ep_pcie_dev_t *dev, bool configured)
 
 	/* Set AUX power to be on */
 	ep_pcie_write_mask(dev->parf + PCIE20_PARF_SYS_CTRL, 0, BIT(4));
-
-	/* Request to exit from L1SS for MSI and LTR MSG */
-	ep_pcie_write_mask(dev->parf + PCIE20_PARF_CFG_BITS, 0, BIT(1));
 
 	EP_PCIE_DBG(dev,
 		"Initial: CLASS_CODE_REVISION_ID:0x%x; HDR_TYPE:0x%x\n",
@@ -616,6 +588,9 @@ static void ep_pcie_core_init(struct ep_pcie_dev_t *dev, bool configured)
 
 		/* Configure BARs */
 		ep_pcie_bar_init(dev);
+
+		ep_pcie_write_reg(dev->mmio, PCIE20_MHICFG, 0x02800880);
+		ep_pcie_write_reg(dev->mmio, PCIE20_BHI_EXECENV, 0x2);
 	}
 
 	/* Configure IRQ events */
@@ -625,13 +600,9 @@ static void ep_pcie_core_init(struct ep_pcie_dev_t *dev, bool configured)
 			BIT(EP_PCIE_INT_EVT_LINK_DOWN) |
 			BIT(EP_PCIE_INT_EVT_BME) |
 			BIT(EP_PCIE_INT_EVT_PM_TURNOFF) |
+			BIT(EP_PCIE_INT_EVT_MHI_A7) |
 			BIT(EP_PCIE_INT_EVT_DSTATE_CHANGE) |
 			BIT(EP_PCIE_INT_EVT_LINK_UP));
-		if (!dev->mhi_a7_irq)
-			ep_pcie_write_mask(dev->parf +
-				PCIE20_PARF_INT_ALL_MASK, 0,
-				BIT(EP_PCIE_INT_EVT_MHI_A7));
-
 		EP_PCIE_DBG(dev, "PCIe V%d: PCIE20_PARF_INT_ALL_MASK:0x%x\n",
 			dev->rev,
 			readl_relaxed(dev->parf + PCIE20_PARF_INT_ALL_MASK));
@@ -643,9 +614,6 @@ static void ep_pcie_core_init(struct ep_pcie_dev_t *dev, bool configured)
 		EP_PCIE_DBG2(dev, "PCIe V%d: Enable L1.\n", dev->rev);
 		ep_pcie_write_mask(dev->parf + PCIE20_PARF_PM_CTRL, BIT(5), 0);
 	}
-
-	/* Configure MMIO */
-	ep_pcie_config_mmio(dev);
 }
 
 static void ep_pcie_config_inbound_iatu(struct ep_pcie_dev_t *dev)
@@ -760,7 +728,6 @@ static int ep_pcie_get_resources(struct ep_pcie_dev_t *dev,
 	char prop_name[MAX_PROP_SIZE];
 	const __be32 *prop;
 	u32 *clkfreq = NULL;
-	enum of_gpio_flags gpio_flags;
 
 	EP_PCIE_DBG(dev, "PCIe V%d\n", dev->rev);
 
@@ -869,15 +836,10 @@ static int ep_pcie_get_resources(struct ep_pcie_dev_t *dev,
 
 	for (i = 0; i < EP_PCIE_MAX_GPIO; i++) {
 		gpio_info = &dev->gpio[i];
-		ret = of_get_named_gpio_flags((&pdev->dev)->of_node,
-					      gpio_info->name, 0, &gpio_flags);
+		ret = of_get_named_gpio((&pdev->dev)->of_node,
+					gpio_info->name, 0);
 		if (ret >= 0) {
 			gpio_info->num = ret;
-			if (i == EP_PCIE_GPIO_MDM2AP) {
-				gpio_info->init =
-					gpio_flags & OF_GPIO_ACTIVE_LOW;
-				gpio_info->on = !gpio_info->init;
-			}
 			ret = 0;
 			EP_PCIE_DBG(dev, "GPIO num for %s is %d\n",
 				gpio_info->name, gpio_info->num);
@@ -1024,24 +986,10 @@ static void ep_pcie_release_resources(struct ep_pcie_dev_t *dev)
 	dev->phy = NULL;
 	dev->mmio = NULL;
 	dev->msi = NULL;
-
-	if (dev->bus_client) {
-		msm_bus_scale_unregister_client(dev->bus_client);
-		dev->bus_client = 0;
-	}
 }
 
 static void ep_pcie_enumeration_complete(struct ep_pcie_dev_t *dev)
 {
-	unsigned long irqsave_flags;
-
-	spin_lock_irqsave(&dev->isr_lock, irqsave_flags);
-
-	if (dev->enumerated) {
-		EP_PCIE_DBG(dev, "PCIe V%d: Enumeration already done\n",
-				dev->rev);
-		goto done;
-	}
 	dev->enumerated = true;
 	dev->link_status = EP_PCIE_LINK_ENABLED;
 
@@ -1069,9 +1017,6 @@ static void ep_pcie_enumeration_complete(struct ep_pcie_dev_t *dev)
 		ep_pcie_dev.rev, hw_drv.device_id);
 	ep_pcie_register_drv(&hw_drv);
 	ep_pcie_notify_event(dev, EP_PCIE_EVENT_LINKUP);
-
-done:
-	spin_unlock_irqrestore(&dev->isr_lock, irqsave_flags);
 
 	return;
 }
@@ -1105,6 +1050,7 @@ int ep_pcie_core_enable_endpoint(enum ep_pcie_options opt)
 		EP_PCIE_ERR(dev,
 			"PCIe V%d: request to turn on the power when link is already powered on.\n",
 			dev->rev);
+		ret = EP_PCIE_ERROR;
 		goto out;
 	}
 
@@ -1418,7 +1364,7 @@ int ep_pcie_core_mask_irq_event(enum ep_pcie_irq_event event,
 	spin_lock_irqsave(&dev->ext_lock, irqsave_flags);
 
 	if (dev->aggregated_irq) {
-		mask = readl_relaxed(dev->parf + PCIE20_PARF_INT_ALL_MASK);
+		mask = readl_relaxed(dev->dm_core + PCIE20_PARF_INT_ALL_MASK);
 		EP_PCIE_DUMP(dev,
 			"PCIe V%d: current PCIE20_PARF_INT_ALL_MASK:0x%x\n",
 			dev->rev, mask);
@@ -1431,7 +1377,7 @@ int ep_pcie_core_mask_irq_event(enum ep_pcie_irq_event event,
 		EP_PCIE_DUMP(dev,
 			"PCIe V%d: new PCIE20_PARF_INT_ALL_MASK:0x%x\n",
 			dev->rev,
-			readl_relaxed(dev->parf + PCIE20_PARF_INT_ALL_MASK));
+			readl_relaxed(dev->dm_core + PCIE20_PARF_INT_ALL_MASK));
 	} else {
 		EP_PCIE_ERR(dev,
 			"PCIe V%d: Client askes to %s IRQ event 0x%x when aggregated IRQ is not supported.\n",
@@ -2341,13 +2287,6 @@ static int ep_pcie_probe(struct platform_device *pdev)
 		"PCIe V%d: aggregated IRQ is %s enabled.\n",
 		ep_pcie_dev.rev, ep_pcie_dev.aggregated_irq ? "" : "not");
 
-	ep_pcie_dev.mhi_a7_irq =
-		of_property_read_bool((&pdev->dev)->of_node,
-				"qcom,pcie-mhi-a7-irq");
-	EP_PCIE_DBG(&ep_pcie_dev,
-		"PCIe V%d: Mhi a7 IRQ is %s enabled.\n",
-		ep_pcie_dev.rev, ep_pcie_dev.mhi_a7_irq ? "" : "not");
-
 	ep_pcie_dev.perst_enum = of_property_read_bool((&pdev->dev)->of_node,
 				"qcom,pcie-perst-enum");
 	EP_PCIE_DBG(&ep_pcie_dev,
@@ -2531,7 +2470,7 @@ static void __exit ep_pcie_exit(void)
 	platform_driver_unregister(&ep_pcie_driver);
 }
 
-subsys_initcall(ep_pcie_init);
+module_init(ep_pcie_init);
 module_exit(ep_pcie_exit);
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("MSM PCIe Endpoint Driver");

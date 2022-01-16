@@ -338,7 +338,32 @@ static ssize_t regulator_uV_show(struct device *dev,
 
 	return ret;
 }
+
+#ifdef CONFIG_HW_MMC_TEST
+extern char *saved_command_line;
+/*regulator voltage write interface*/
+static ssize_t regulator_uV_store(struct device *dev, struct device_attribute *attr,
+            const char *buf, size_t count)
+{
+	struct regulator_dev *rdev = dev_get_drvdata(dev);
+	int min_uV = 0;
+	int max_uV = 0;
+
+	/*check if it is factory mode*/
+	if(strstr(saved_command_line,"androidboot.huawei_swtype=factory")!=NULL) {
+		mutex_lock(&rdev->mutex);
+		sscanf(buf, "%d,%d", &min_uV,&max_uV);
+		pr_info("regulator_uV_store:%d, %d\n", max_uV, min_uV);
+		_regulator_do_set_voltage(rdev,min_uV,max_uV);
+		mutex_unlock(&rdev->mutex);
+	}
+
+	return count;
+}
+static DEVICE_ATTR(microvolts, 0644, regulator_uV_show, regulator_uV_store);
+#else
 static DEVICE_ATTR(microvolts, 0444, regulator_uV_show, NULL);
+#endif
 
 static ssize_t regulator_uA_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
@@ -2152,14 +2177,6 @@ static void regulator_disable_work(struct work_struct *work)
 	count = rdev->deferred_disables;
 	rdev->deferred_disables = 0;
 
-	/*
-	 * Workqueue functions queue the new work instance while the previous
-	 * work instance is being processed. Cancel the queued work instance
-	 * as the work instance under processing does the job of the queued
-	 * work instance.
-	 */
-	cancel_delayed_work(&rdev->disable_work);
-
 	for (i = 0; i < count; i++) {
 		ret = _regulator_disable(rdev);
 		if (ret != 0)
@@ -2194,6 +2211,7 @@ static void regulator_disable_work(struct work_struct *work)
 int regulator_disable_deferred(struct regulator *regulator, int ms)
 {
 	struct regulator_dev *rdev = regulator->rdev;
+	int ret;
 
 	if (regulator->always_on)
 		return 0;
@@ -2203,11 +2221,15 @@ int regulator_disable_deferred(struct regulator *regulator, int ms)
 
 	mutex_lock(&rdev->mutex);
 	rdev->deferred_disables++;
-	mod_delayed_work(system_power_efficient_wq, &rdev->disable_work,
-			 msecs_to_jiffies(ms));
 	mutex_unlock(&rdev->mutex);
 
-	return 0;
+	ret = queue_delayed_work(system_power_efficient_wq,
+				 &rdev->disable_work,
+				 msecs_to_jiffies(ms));
+	if (ret < 0)
+		return ret;
+	else
+		return 0;
 }
 EXPORT_SYMBOL_GPL(regulator_disable_deferred);
 
@@ -3824,7 +3846,7 @@ static ssize_t reg_debug_volt_get(struct file *file, char __user *buf,
 	mutex_lock(&debug_buf_mutex);
 
 	output = snprintf(debug_buf, MAX_DEBUG_BUF_LEN-1, "%d\n", voltage);
-	rc = simple_read_from_buffer((void __user *) buf, count, ppos,
+	rc = simple_read_from_buffer((void __user *) buf, output, ppos,
 					(void *) debug_buf, output);
 
 	mutex_unlock(&debug_buf_mutex);

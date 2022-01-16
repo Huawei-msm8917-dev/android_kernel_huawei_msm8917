@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -416,8 +416,6 @@ int ipa3_copy_ul_filter_rule_to_ipa(struct ipa_install_fltr_rule_req_msg_v01
 {
 	int i, j;
 
-	/* prevent multi-threads accessing rmnet_ipa3_ctx->num_q6_rules */
-	mutex_lock(&rmnet_ipa3_ctx->add_mux_channel_lock);
 	if (rule_req->filter_spec_ex_list_valid == true) {
 		rmnet_ipa3_ctx->num_q6_rules =
 			rule_req->filter_spec_ex_list_len;
@@ -426,8 +424,6 @@ int ipa3_copy_ul_filter_rule_to_ipa(struct ipa_install_fltr_rule_req_msg_v01
 	} else {
 		rmnet_ipa3_ctx->num_q6_rules = 0;
 		IPAWANERR("got no UL rules from modem\n");
-		mutex_unlock(&rmnet_ipa3_ctx->
-					add_mux_channel_lock);
 		return -EINVAL;
 	}
 
@@ -630,13 +626,9 @@ failure:
 	rmnet_ipa3_ctx->num_q6_rules = 0;
 	memset(ipa3_qmi_ctx->q6_ul_filter_rule, 0,
 		sizeof(ipa3_qmi_ctx->q6_ul_filter_rule));
-	mutex_unlock(&rmnet_ipa3_ctx->
-		add_mux_channel_lock);
 	return -EINVAL;
 
 success:
-	mutex_unlock(&rmnet_ipa3_ctx->
-		add_mux_channel_lock);
 	return 0;
 }
 
@@ -783,7 +775,7 @@ static int find_vchannel_name_index(const char *vchannel_name)
 {
 	int i;
 
-	for (i = 0; i < rmnet_ipa3_ctx->rmnet_index; i++) {
+	for (i = 0; i < MAX_NUM_OF_MUX_CHANNEL; i++) {
 		if (0 == strcmp(rmnet_ipa3_ctx->mux_channel[i].vchannel_name,
 					vchannel_name))
 			return i;
@@ -1332,13 +1324,8 @@ static int handle3_egress_format(struct net_device *dev,
 
 	if (rmnet_ipa3_ctx->num_q6_rules != 0) {
 		/* already got Q6 UL filter rules*/
-		if (ipa3_qmi_ctx->modem_cfg_emb_pipe_flt == false) {
-			/* prevent multi-threads accessing num_q6_rules */
-			mutex_lock(&rmnet_ipa3_ctx->add_mux_channel_lock);
+		if (ipa3_qmi_ctx->modem_cfg_emb_pipe_flt == false)
 			rc = ipa3_wwan_add_ul_flt_rule_to_ipa();
-			mutex_unlock(&rmnet_ipa3_ctx->
-				add_mux_channel_lock);
-		}
 		if (rc)
 			IPAWANERR("install UL rules failed\n");
 		else
@@ -1449,8 +1436,6 @@ static int ipa3_wwan_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 
 	/*  Extended IOCTLs  */
 	case RMNET_IOCTL_EXTENDED:
-		if (!ns_capable(dev_net(dev)->user_ns, CAP_NET_ADMIN))
-			return -EPERM;
 		IPAWANDBG("get ioctl: RMNET_IOCTL_EXTENDED\n");
 		if (copy_from_user(&extend_ioctl_data,
 			(u8 *)ifr->ifr_ifru.ifru_data,
@@ -1564,8 +1549,6 @@ static int ipa3_wwan_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 					add_mux_channel_lock);
 				return -EFAULT;
 			}
-			extend_ioctl_data.u.rmnet_mux_val.vchannel_name
-				[IFNAMSIZ-1] = '\0';
 			IPAWANDBG("ADD_MUX_CHANNEL(%d, name: %s)\n",
 			extend_ioctl_data.u.rmnet_mux_val.mux_id,
 			extend_ioctl_data.u.rmnet_mux_val.vchannel_name);
@@ -1701,7 +1684,6 @@ static int ipa3_wwan_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 				IPAWANERR("Failed to allocate memory.\n");
 				return -ENOMEM;
 			}
-			extend_ioctl_data.u.if_name[IFNAMSIZ-1] = '\0';
 			len = sizeof(wan_msg->upstream_ifname) >
 			sizeof(extend_ioctl_data.u.if_name) ?
 				sizeof(extend_ioctl_data.u.if_name) :
@@ -2427,31 +2409,6 @@ static struct platform_driver rmnet_ipa_driver = {
 	.remove = ipa3_wwan_remove,
 };
 
-/**
-*
-* rmnet_ipa_send_ssr_notification(bool ssr_done) - send SSR notification
-*
-* This function sends the SSR notification before modem shutdown and
-* after_powerup from SSR framework, to user-space module
-*/
-
-static void rmnet_ipa_send_ssr_notification(bool ssr_done)
-{
-	struct ipa_msg_meta msg_meta;
-	int rc;
-
-	memset(&msg_meta, 0, sizeof(struct ipa_msg_meta));
-	if (ssr_done)
-		msg_meta.msg_type = IPA_SSR_AFTER_POWERUP;
-	else
-		msg_meta.msg_type = IPA_SSR_BEFORE_SHUTDOWN;
-	rc = ipa_send_msg(&msg_meta, NULL, NULL);
-	if (rc) {
-		IPAWANERR("ipa_send_msg failed: %d\n", rc);
-		return;
-	}
-}
-
 static int ipa3_ssr_notifier_cb(struct notifier_block *this,
 			   unsigned long code,
 			   void *data)
@@ -2462,8 +2419,6 @@ static int ipa3_ssr_notifier_cb(struct notifier_block *this,
 	switch (code) {
 	case SUBSYS_BEFORE_SHUTDOWN:
 		IPAWANINFO("IPA received MPSS BEFORE_SHUTDOWN\n");
-		/* send SSR before-shutdown notification to IPACM */
-		rmnet_ipa_send_ssr_notification(false);
 		atomic_set(&rmnet_ipa3_ctx->is_ssr, 1);
 		ipa3_q6_pre_shutdown_cleanup();
 		if (IPA_NETDEV())
@@ -2642,26 +2597,6 @@ static void rmnet_ipa_get_network_stats_and_update(void)
 }
 
 /**
-* rmnet_ipa_send_quota_reach_ind() - send quota_reach notification from
-* IPA Modem
-* This function sends the quota_reach indication from the IPA Modem driver
-* via QMI, to user-space module
-*/
-static void rmnet_ipa_send_quota_reach_ind(void)
-{
-	struct ipa_msg_meta msg_meta;
-	int rc;
-
-	memset(&msg_meta, 0, sizeof(struct ipa_msg_meta));
-	msg_meta.msg_type = IPA_QUOTA_REACH;
-	rc = ipa_send_msg(&msg_meta, NULL, NULL);
-	if (rc) {
-		IPAWANERR("ipa_send_msg failed: %d\n", rc);
-		return;
-	}
-}
-
-/**
  * rmnet_ipa3_poll_tethering_stats() - Tethering stats polling IOCTL handler
  * @data - IOCTL data
  *
@@ -2720,7 +2655,7 @@ int rmnet_ipa3_set_data_quota(struct wan_ioctl_set_data_quota *data)
 	if (index == MAX_NUM_OF_MUX_CHANNEL) {
 		IPAWANERR("%s is an invalid iface name\n",
 			  data->interface_name);
-		return -ENODEV;
+		return -EFAULT;
 	}
 
 	mux_id = rmnet_ipa3_ctx->mux_channel[index].mux_id;
@@ -2806,14 +2741,6 @@ int rmnet_ipa3_query_tethering_stats(struct wan_ioctl_query_tether_stats *data,
 	struct ipa_get_data_stats_resp_msg_v01 *resp;
 	int pipe_len, rc;
 
-	if (data != NULL) {
-		data->upstreamIface[IFNAMSIZ-1] = '\0';
-		data->tetherIface[IFNAMSIZ-1] = '\0';
-	} else if (reset != false) {
-		/* Data can be NULL for reset stats, checking reset != False */
-		return -EINVAL;
-	}
-
 	req = kzalloc(sizeof(struct ipa_get_data_stats_req_msg_v01),
 			GFP_KERNEL);
 	if (!req) {
@@ -2837,10 +2764,7 @@ int rmnet_ipa3_query_tethering_stats(struct wan_ioctl_query_tether_stats *data,
 		IPAWANERR("reset the pipe stats\n");
 	} else {
 		/* print tethered-client enum */
-		if (data == NULL)
-			return -EINVAL;
-		IPAWANDBG_LOW("Tethered-client enum(%d)\n",
-				data->ipa_client);
+		IPAWANDBG_LOW("Tethered-client enum(%d)\n", data->ipa_client);
 	}
 
 	rc = ipa3_qmi_get_data_stats(req, resp);
@@ -2849,7 +2773,7 @@ int rmnet_ipa3_query_tethering_stats(struct wan_ioctl_query_tether_stats *data,
 		kfree(req);
 		kfree(resp);
 		return rc;
-	} else if (data == NULL) {
+	} else if (reset) {
 		kfree(req);
 		kfree(resp);
 		return 0;
@@ -2958,29 +2882,6 @@ int rmnet_ipa3_query_tethering_stats(struct wan_ioctl_query_tether_stats *data,
 	return 0;
 }
 
-
-int rmnet_ipa3_query_tethering_stats_all(
-	struct wan_ioctl_query_tether_stats_all *data)
-{
-	struct wan_ioctl_query_tether_stats tether_stats;
-	int rc = 0;
-
-	memset(&tether_stats, 0, sizeof(struct wan_ioctl_query_tether_stats));
-
-	tether_stats.ipa_client = data->ipa_client;
-	rc = rmnet_ipa3_query_tethering_stats(
-		&tether_stats, data->reset_stats);
-	if (rc) {
-		IPAWANERR("WAN_IOC_QUERY_TETHER_STATS failed\n");
-		return rc;
-	}
-	data->tx_bytes = tether_stats.ipv4_tx_bytes
-			+ tether_stats.ipv6_tx_bytes;
-	data->rx_bytes = tether_stats.ipv4_rx_bytes
-			+ tether_stats.ipv6_rx_bytes;
-	return rc;
-}
-
 /**
  * ipa3_broadcast_quota_reach_ind() - Send Netlink broadcast on Quota
  * @mux_id - The MUX ID on which the quota has been reached
@@ -3032,7 +2933,6 @@ void ipa3_broadcast_quota_reach_ind(u32 mux_id)
 		alert_msg, iface_name_l, iface_name_m);
 	kobject_uevent_env(&(IPA_NETDEV()->dev.kobj),
 		KOBJ_CHANGE, envp);
-	rmnet_ipa_send_quota_reach_ind();
 }
 
 /**
@@ -3056,9 +2956,6 @@ void ipa3_q6_handshake_complete(bool ssr_bootup)
 		 * once Modem init is complete.
 		 */
 		ipa3_proxy_clk_unvote();
-
-		/* send SSR power-up notification to IPACM */
-		rmnet_ipa_send_ssr_notification(true);
 
 		/*
 		 * It is required to recover the network stats after
@@ -3307,15 +3204,6 @@ int rmnet_ipa3_send_lan_client_msg(
 		IPAWANERR("Can't allocate memory for tether_info\n");
 		return -ENOMEM;
 	}
-
-	if (data->client_event != IPA_PER_CLIENT_STATS_CONNECT_EVENT &&
-		data->client_event != IPA_PER_CLIENT_STATS_DISCONNECT_EVENT) {
-		IPAWANERR("Wrong event given. Event:- %d\n",
-			data->client_event);
-		kfree(lan_client);
-		return -EINVAL;
-	}
-	data->lan_client.lanIface[IPA_RESOURCE_NAME_MAX-1] = '\0';
 	memset(&msg_meta, 0, sizeof(struct ipa_msg_meta));
 	memcpy(lan_client, &data->lan_client,
 		sizeof(struct ipa_lan_client_msg));
