@@ -26,6 +26,10 @@
 #include "reg.h"
 #include "rdev-ops.h"
 
+#ifndef CONFIG_HW_GET_EXT_SIG
+#define CONFIG_HW_GET_EXT_SIG
+#endif
+
 static int nl80211_crypto_settings(struct cfg80211_registered_device *rdev,
 				   struct genl_info *info,
 				   struct cfg80211_crypto_settings *settings,
@@ -493,14 +497,6 @@ nl80211_bss_select_policy[NL80211_BSS_SELECT_ATTR_MAX + 1] = {
 	[NL80211_BSS_SELECT_ATTR_RSSI_ADJUST] = {
 		.len = sizeof(struct nl80211_bss_select_rssi_adjust)
 	},
-};
-
-/* policy for packet pattern attributes */
-static const struct nla_policy
-nl80211_packet_pattern_policy[MAX_NL80211_PKTPAT + 1] = {
-	[NL80211_PKTPAT_MASK] = { .type = NLA_BINARY, },
-	[NL80211_PKTPAT_PATTERN] = { .type = NLA_BINARY, },
-	[NL80211_PKTPAT_OFFSET] = { .type = NLA_U32 },
 };
 
 static int nl80211_prepare_wdev_dump(struct sk_buff *skb,
@@ -4163,6 +4159,26 @@ static int nl80211_send_station(struct sk_buff *msg, u32 portid, u32 seq,
 		    sinfo->assoc_req_ies))
 		goto nla_put_failure;
 
+#ifdef CONFIG_HW_GET_EXT_SIG
+	if ((sinfo->filled & BIT(NL80211_STA_INFO_NOISE))) {
+		if (nla_put_s32(msg, NL80211_STA_INFO_NOISE, sinfo->noise)) {
+			goto nla_put_failure;
+		}
+	}
+
+	if ((sinfo->filled & BIT(NL80211_STA_INFO_SNR))) {
+		if (nla_put_s32(msg, NL80211_STA_INFO_SNR, sinfo->snr)) {
+			goto nla_put_failure;
+		}
+	}
+
+	if ((sinfo->filled & BIT(NL80211_STA_INFO_CNAHLOAD))) {
+		if (nla_put_s32(msg, NL80211_STA_INFO_CNAHLOAD, sinfo->chload)) {
+			goto nla_put_failure;
+		}
+	}
+#endif
+
 	return genlmsg_end(msg, hdr);
 
  nla_put_failure:
@@ -5783,10 +5799,6 @@ static int validate_scan_freqs(struct nlattr *freqs)
 		if (nla_len(attr1) != sizeof(u32))
 			return 0;
 
-	nla_for_each_nested(attr1, freqs, tmp1)
-		if (nla_len(attr1) != sizeof(u32))
-			return 0;
-
 	nla_for_each_nested(attr1, freqs, tmp1) {
 		n_channels++;
 		/*
@@ -7005,8 +7017,12 @@ static int nl80211_dump_scan(struct sk_buff *skb, struct netlink_callback *cb)
 	int err;
 
 	err = nl80211_prepare_wdev_dump(skb, cb, &rdev, &wdev);
-	if (err)
+	if (err){
+		pr_err("%s fail  %d\n",__FUNCTION__,err);
 		return err;
+	}
+
+	pr_err("%s enter \n",__FUNCTION__);
 
 	wdev_lock(wdev);
 	spin_lock_bh(&rdev->bss_lock);
@@ -7030,6 +7046,7 @@ static int nl80211_dump_scan(struct sk_buff *skb, struct netlink_callback *cb)
 
 	cb->args[2] = idx;
 	nl80211_finish_wdev_dump(rdev);
+	pr_err("%s exit \n",__FUNCTION__);
 
 	return skb->len;
 }
@@ -9307,7 +9324,7 @@ static int nl80211_set_wowlan(struct sk_buff *skb, struct genl_info *info)
 			u8 *mask_pat;
 
 			nla_parse(pat_tb, MAX_NL80211_PKTPAT, nla_data(pat),
-				  nla_len(pat), nl80211_packet_pattern_policy);
+				  nla_len(pat), NULL);
 			err = -EINVAL;
 			if (!pat_tb[NL80211_PKTPAT_MASK] ||
 			    !pat_tb[NL80211_PKTPAT_PATTERN])
@@ -9535,7 +9552,7 @@ static int nl80211_parse_coalesce_rule(struct cfg80211_registered_device *rdev,
 		u8 *mask_pat;
 
 		nla_parse(pat_tb, MAX_NL80211_PKTPAT, nla_data(pat),
-			  nla_len(pat), nl80211_packet_pattern_policy);
+			  nla_len(pat), NULL);
 		if (!pat_tb[NL80211_PKTPAT_MASK] ||
 		    !pat_tb[NL80211_PKTPAT_PATTERN])
 			return -EINVAL;
@@ -9874,7 +9891,6 @@ static int nl80211_update_ft_ies(struct sk_buff *skb, struct genl_info *info)
 		return -EOPNOTSUPP;
 
 	if (!info->attrs[NL80211_ATTR_MDID] ||
-	    !info->attrs[NL80211_ATTR_IE] ||
 	    !is_valid_ie_attr(info->attrs[NL80211_ATTR_IE]))
 		return -EINVAL;
 

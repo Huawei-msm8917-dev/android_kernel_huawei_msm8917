@@ -4410,24 +4410,6 @@ __sum16 __skb_gro_checksum_complete(struct sk_buff *skb)
 }
 EXPORT_SYMBOL(__skb_gro_checksum_complete);
 
-static void net_rps_send_ipi(struct softnet_data *remsd)
-{
-#ifdef CONFIG_RPS
-	while (remsd) {
-		struct softnet_data *next = remsd->rps_ipi_next;
-
-		if (cpu_online(remsd->cpu)) {
-			smp_call_function_single_async(remsd->cpu, &remsd->csd);
-		} else {
-			rps_lock(remsd);
-			remsd->backlog.state = 0;
-			rps_unlock(remsd);
-		}
-		remsd = next;
-	}
-#endif
-}
-
 /*
  * net_rps_action_and_irq_enable sends any pending IPI's for rps.
  * Note: called with local irq disabled, but exits with local irq enabled.
@@ -4443,7 +4425,20 @@ static void net_rps_action_and_irq_enable(struct softnet_data *sd)
 		local_irq_enable();
 
 		/* Send pending IPI's to kick RPS processing on remote cpus. */
-		net_rps_send_ipi(remsd);
+		while (remsd) {
+			struct softnet_data *next = remsd->rps_ipi_next;
+
+			if (cpu_online(remsd->cpu)) {
+				smp_call_function_single_async(remsd->cpu,
+							   &remsd->csd);
+			} else {
+				pr_err("%s() cpu offline\n", __func__);
+				rps_lock(remsd);
+				remsd->backlog.state = 0;
+				rps_unlock(remsd);
+			}
+			remsd = next;
+		}
 	} else
 #endif
 		local_irq_enable();
@@ -5984,7 +5979,9 @@ static void rollback_registered_many(struct list_head *head)
 {
 	struct net_device *dev, *tmp;
 	LIST_HEAD(close_head);
-
+#ifdef CONFIG_HUAWEI_WIFI
+	pr_err("rollback_registered_many:  enter\n");
+#endif
 	BUG_ON(dev_boot_phase);
 	ASSERT_RTNL();
 
@@ -6028,8 +6025,13 @@ static void rollback_registered_many(struct list_head *head)
 		/* Notify protocols, that we are about to destroy
 		   this device. They should clean all the things.
 		*/
+#ifdef CONFIG_HUAWEI_WIFI
+		pr_err("call_netdevice_notifiers:  will enter\n");
+#endif
 		call_netdevice_notifiers(NETDEV_UNREGISTER, dev);
-
+#ifdef CONFIG_HUAWEI_WIFI
+		pr_err("call_netdevice_notifiers:  exit\n");
+#endif
 		/*
 		 *	Flush the unicast and multicast chains
 		 */
@@ -6058,6 +6060,9 @@ static void rollback_registered_many(struct list_head *head)
 
 	list_for_each_entry(dev, head, unreg_list)
 		dev_put(dev);
+#ifdef CONFIG_HUAWEI_WIFI
+	pr_err("rollback_registered_many:  exit\n");
+#endif
 }
 
 static void rollback_registered(struct net_device *dev)
@@ -7111,7 +7116,7 @@ static int dev_cpu_callback(struct notifier_block *nfb,
 	struct sk_buff **list_skb;
 	struct sk_buff *skb;
 	unsigned int cpu, oldcpu = (unsigned long)ocpu;
-	struct softnet_data *sd, *oldsd, *remsd;
+	struct softnet_data *sd, *oldsd;
 
 	if (action != CPU_DEAD && action != CPU_DEAD_FROZEN)
 		return NOTIFY_OK;
@@ -7154,13 +7159,6 @@ static int dev_cpu_callback(struct notifier_block *nfb,
 
 	raise_softirq_irqoff(NET_TX_SOFTIRQ);
 	local_irq_enable();
-
-#ifdef CONFIG_RPS
-	remsd = oldsd->rps_ipi_list;
-	oldsd->rps_ipi_list = NULL;
-#endif
-	/* send out pending IPI's on offline CPU */
-	net_rps_send_ipi(remsd);
 
 	/* Process offline CPU's input_pkt_queue */
 	while ((skb = __skb_dequeue(&oldsd->process_queue))) {
