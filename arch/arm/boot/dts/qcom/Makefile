@@ -1,6 +1,10 @@
-dtb-$(CONFIG_ARCH_MSM8996) += msm8996-v2-pmi8994-mtp.dtb \
+dtb-$(CONFIG_ARCH_MSM8996) += msm8996-v2-pmi8994-cdp.dtb \
+	msm8996-v2-pmi8994-mtp.dtb \
+	msm8996-v2-pmi8994-pmk8001-cdp.dtb \
 	msm8996-v2-pmi8994-pmk8001-mtp.dtb \
+	msm8996-v2-pmi8994-pm8004-cdp.dtb \
 	msm8996-v2-pmi8994-pm8004-mtp.dtb \
+	msm8996-v2-pmi8994-pm8004-pmk8001-cdp.dtb \
 	msm8996-v2-pmi8994-pm8004-pmk8001-mtp.dtb \
 	msm8996-v2-fluid.dtb \
 	msm8996-v2-liquid.dtb \
@@ -81,7 +85,11 @@ dtb-$(CONFIG_ARCH_MSM8996) += msm8996-v2-pmi8994-mtp.dtb \
 	msm8996-v3.0-fluid.dtb \
 	msm8996-v3.0-liquid.dtb \
 	msm8996-v3.0-dtp.dtb \
+	apq8096-v2-pmi8994-cdp.dtb \
 	apq8096-v2-pmi8994-mtp.dtb \
+	apq8096-v2-pmi8994-pmk8001-cdp.dtb \
+	apq8096-v2-pmi8994-pm8004-cdp.dtb \
+	apq8096-v2-pmi8994-pm8004-pmk8001-cdp.dtb \
 	apq8096-v2-liquid.dtb \
 	apq8096-v2-dragonboard.dtb \
 	apq8096-v2-auto-dragonboard.dtb \
@@ -142,18 +150,24 @@ dtb-$(CONFIG_ARCH_MDM9640) += mdm9640-sim.dtb \
 	mdm9640-v2-pmk8001-mtp.dtb \
 
 
-dtb-$(CONFIG_ARCH_MDM9650) += mdm9650-ttp.dtb \
-	mdm9650-pcie-ep-ttp.dtb \
+dtb-$(CONFIG_ARCH_MDM9650) += mdm9650-sim.dtb \
+	mdm9650-rumi.dtb \
+	mdm9650-emmc-cdp.dtb \
+	mdm9650-nand-cdp.dtb \
+	mdm9650-emmc-mtp.dtb \
+	mdm9650-nand-mtp.dtb \
+	mdm9650-ttp.dtb \
 	mdm9650-nand-dualwifi-mtp.dtb \
 	mdm9650-v1.1-emmc-cdp.dtb \
 	mdm9650-v1.1-nand-cdp.dtb \
 	mdm9650-v1.1-emmc-mtp.dtb \
 	mdm9650-v1.1-nand-mtp.dtb \
+	mdm9650-v1.1-nand-dualwifi-mtp.dtb \
+	mdm9650-v1.1-nand-ccard.dtb \
 	mdm9650-v1.1-nand-ccard-v2.dtb \
 	mdm9650-v1.1-emmc-pcie-ep-mtp.dtb \
 	mdm9650-v1.1-nand-pcie-ep-mtp.dtb \
-	mdm9650-v1.1-nand-cv2x.dtb \
-	mdm9650-v1.1-nand-rome-sdio-mtp.dtb
+	mdm9650-v1.1-nand-cv2x.dtb
 
 dtb-$(CONFIG_ARCH_SDX20) += sdx20-emmc-cdp.dtb \
 	sdx20-emmc-mtp.dtb \
@@ -191,29 +205,55 @@ dtb-$(CONFIG_ARCH_MSM8937) += msm8937-rumi.dtb \
 	apq8037-pmi8950-cdp.dtb \
 	apq8037-pmi8937-cdp.dtb \
 	apq8037-pmi8950-mtp.dtb \
-	apq8037-pmi8937-mtp.dtb
+	apq8037-pmi8937-mtp.dtb \
+	huawei_msm8937_lnd_al00b_va.dtb \
+	huawei_msm8937_lnd_tl00c_va.dtb \
+	huawei_msm8937_lnd_l01_va.dtb \
+	huawei_msm8937_lnd_al00a_va.dtb \
+	huawei_msm8937_lnd_tl00a_va.dtb \
+	huawei_msm8937_lnd_l23_va.dtb \
+	huawei_msm8937_lnd_l22_va.dtb \
+	huawei_msm8937_lnd_l22a_va.dtb \
+	huawei_msm8937_lnd_l21a_va.dtb \
+	huawei_msm8937_lnd_al00c_va.dtb \
+	huawei_msm8937_lnd_al10_va.dtb \
+	huawei_msm8937_lnd_l21b_va.dtb \
+	huawei_msm8937_lnd_tl00b_va.dtb \
+	huawei_msm8937_lnd_tl00n_va.dtb \
+	huawei_msm8937_lnd_tl10_va.dtb \
+	huawei_msm8937_atu_al00_va.dtb \
+	huawei_msm8937_atu_tl00_va.dtb \
+	huawei_msm8937_atu_l29_va.dtb \
+	huawei_msm8937_atu_al10_va.dtb \
+	huawei_msm8937_atu_tl10_va.dtb \
+	huawei_msm8937_atu_tl20b_va.dtb \
+	huawei_msm8937_atu_al20b_va.dtb \
+	huawei_msm8937_atu_l41_va.dtb \
+        huawei_msm8917_atu_l31_va.dtb \
+        huawei_msm8937_atu_al30b_va.dtb \
+        huawei_msm8937_atu_tl30b_va.dtb \
+        huawei_msm8937_lnd_tl50_va.dtb \
+        huawei_msm8937_lnd_al50_va.dtb \
+        huawei_msm8937_lnd_al00d_va.dtb
 
-dtb-$(CONFIG_ARCH_MSM8917) += msm8917-rumi.dtb \
-	apq8017-pmi8937-cdp.dtb \
-	apq8017-pmi8937-mtp.dtb \
-	apq8017-pmi8950-cdp.dtb \
-	apq8017-pmi8950-mtp.dtb \
-	msm8917-pmi8937-cdp.dtb \
-	msm8917-pmi8937-mtp.dtb \
-	msm8917-pmi8940-cdp.dtb \
-	msm8917-pmi8940-mtp.dtb \
-	msm8917-pmi8950-cdp.dtb \
-	msm8917-pmi8950-cdp-mirror-lake-touch.dtb \
-	msm8917-pmi8950-ext-codec-cdp.dtb \
-	msm8917-pmi8950-mtp.dtb \
-	msm8917-pmi8937-rcm.dtb \
-	msm8917-pmi8940-rcm.dtb \
-	msm8917-pmi8950-rcm.dtb \
-	msm8917-qgp-tmo.dtb \
-	msm8917-pmi8937-qrd-sku5.dtb \
-	apq8017-pmi8937-cdp-wcd-rome.dtb \
-	apq8017-pmi8950-cdp-wcd-rome.dtb \
-	apq8017-no-pmi-wcd-rome-cdp.dtb
+dtb-$(CONFIG_ARCH_MSM8917) += \
+	huawei_msm8917_ygn_l42_va.dtb \
+	huawei_msm8917_ygn_l23_va.dtb \
+	huawei_msm8917_ygn_l41_va.dtb \
+	huawei_msm8917_ygn_l21_va.dtb \
+	huawei_msm8917_ygn_l22_va.dtb \
+	huawei_msm8917_ygn_al00_vb.dtb \
+	huawei_msm8917_ygn_al00_va.dtb \
+	huawei_msm8917_ygn_l51_va.dtb \
+	huawei_msm8917_ygn_tl10_va.dtb \
+	huawei_msm8917_ygn_tl10_vb.dtb \
+	huawei_msm8917_ygn_l61_va.dtb \
+	huawei_msm8917_ygn_l61_vb.dtb \
+	huawei_msm8917_atu_l11_va.dtb \
+	huawei_msm8917_atu_l21_va.dtb \
+	huawei_msm8917_atu_l22_va.dtb \
+	huawei_msm8917_atu_l23_va.dtb \
+	huawei_msm8917_atu_l42_va.dtb
 
 dtb-$(CONFIG_ARCH_MSM8920) += msm8920-pmi8937-cdp.dtb \
 	msm8920-pmi8937-mtp.dtb \
@@ -236,7 +276,26 @@ dtb-$(CONFIG_ARCH_MSM8940) += msm8940-pmi8937-cdp.dtb \
 	msm8940-pmi8940-mtp.dtb \
 	msm8940-pmi8940-cdp.dtb \
 	msm8940-pmi8940-rcm.dtb \
-	msm8940-pmi8940-qrd-sku7.dtb
+	msm8940-pmi8940-qrd-sku7.dtb \
+	huawei-trt-al00-va.dtb \
+	huawei-trt-tl10-va.dtb \
+	huawei-trt-l21-va.dtb \
+	huawei-trt-l22-va.dtb \
+	huawei-trt-l23-va.dtb \
+    huawei-trt-l53-va.dtb \
+    huawei-trt-al00-vb.dtb \
+        huawei-trt-a1.dtb \
+    huawei-trt-a1-vb.dtb \
+    huawei-trt-al00-vc.dtb \
+    huawei-trt-l21a.dtb \
+    huawei-trt-tl10hk.dtb \
+    huawei-trt-tl10-vd.dtb \
+    huawei-trt-l21-vd.dtb \
+    huawei-trt-l22-vd.dtb \
+    huawei-trt-l23-vd.dtb \
+    huawei-trt-l53-vd.dtb \
+    huawei-trt-al00-vd.dtb \
+    huawei-trt-a1-vd.dtb
 
 dtb-$(CONFIG_ARCH_MSM8953) += msm8953-sim.dtb \
 	msm8953-rumi.dtb \
@@ -253,9 +312,6 @@ dtb-$(CONFIG_ARCH_MSM8953) += msm8953-sim.dtb \
 	apq8053-mtp.dtb \
 	apq8053-ext-audio-mtp.dtb \
 	apq8053-ext-codec-rcm.dtb \
-	apq8053-lite-dragon-v1.0.dtb \
-	apq8053-lite-dragon-v2.0.dtb \
-	apq8053-lite-ext-codec-dragon-v2.0.dtb \
 	msm8953-cdp-1200p.dtb \
 	msm8953-iot-mtp.dtb \
 	apq8053-iot-mtp.dtb \
@@ -272,9 +328,12 @@ dtb-$(CONFIG_ARCH_SDM450) += sdm450-rcm.dtb \
 	sdm450-qrd.dtb \
 	sdm450-pmi8940-mtp.dtb \
 	sdm450-pmi8937-mtp.dtb \
-	sdm450-iot-mtp.dtb \
-	sda450-cdp.dtb \
-	sda450-mtp.dtb
+	huawei_sdm450_lnd_al30a_va.dtb \
+	huawei_sdm450_lnd_al40_va.dtb \
+	huawei_sdm450_lnd_l29_va.dtb \
+	huawei_sdm450_lnd_tl30a_va.dtb \
+	huawei_sdm450_lnd_tl40_va.dtb \
+	huawei_sdm450_lnd_al30b_va.dtb 
 
 dtb-$(CONFIG_ARCH_MDM9607) += mdm9607-rumi.dtb \
 	mdm9607-cdp.dtb \
@@ -293,10 +352,8 @@ dtb-$(CONFIG_ARCH_MSM8916) += msm8952-qrd-skum.dtb \
        msm8952-mtp.dtb
 
 dtb-$(CONFIG_ARCH_MSM8909) += msm8909-pm8916-mtp.dtb \
-	msm8909-cdp.dtb \
         msm8909-1gb-qrd-skuc.dtb \
         msm8909-1gb-qrd-skue.dtb \
-        msm8909-qrd-skue.dtb \
 	msm8909w-wtp.dtb \
 	apq8009w-wtp.dtb \
 	apq8009w-cdp.dtb \
@@ -340,12 +397,8 @@ dtb-$(CONFIG_ARCH_MSM8909) += msm8909-pm8916-mtp.dtb \
 	apq8009-robot-rome.dtb \
 	apq8009-mtp-drone.dtb \
 	msm8909-mtp.dtb \
-	msm8909-1gb-mtp.dtb \
-	msm8909-1gb-rcm.dtb \
-	msm8909-pm8916-1gb-rcm.dtb \
-	msm8909-1gb-cdp.dtb \
-	apq8009-ext-codec-dragon.dtb \
-	apq8009-dragon.dtb
+	msm8909-1gb-mtp.dtb
+
 
 ifeq ($(CONFIG_ARM64),y)
 always          := $(dtb-y)
