@@ -32,7 +32,6 @@
 #include <linux/syscalls.h>
 
 #include <asm/atomic.h>
-#include <asm/barrier.h>
 #include <asm/debug-monitors.h>
 #include <asm/esr.h>
 #include <asm/traps.h>
@@ -43,7 +42,9 @@
 #include <asm/edac.h>
 
 #include <trace/events/exception.h>
-
+#ifdef CONFIG_FASTBOOT_DUMP
+#include <linux/fastboot_dump_reason_api.h>
+#endif
 static const char *handler[]= {
 	"Synchronous Abort",
 	"IRQ",
@@ -292,6 +293,9 @@ void arm64_notify_die(const char *str, struct pt_regs *regs,
 		current->thread.fault_code = err;
 		force_sig_info(info->si_signo, info, current);
 	} else {
+#ifdef CONFIG_FASTBOOT_DUMP
+		fastboot_dump_s_reason_str_set(str);
+#endif
 		die(str, regs, err);
 	}
 }
@@ -391,45 +395,15 @@ asmlinkage void __exception do_undefinstr(struct pt_regs *regs)
 			current->comm, task_pid_nr(current), pc);
 		dump_instr(KERN_INFO, regs);
 	}
-
+#ifdef CONFIG_FASTBOOT_DUMP
+	fastboot_dump_s_reason_set(FD_S_APANIC_UNDEF_CMD);
+#endif
 	info.si_signo = SIGILL;
 	info.si_errno = 0;
 	info.si_code  = ILL_ILLOPC;
 	info.si_addr  = pc;
 
 	arm64_notify_die("Oops - undefined instruction", regs, &info, 0);
-}
-
-static void cntvct_read_handler(unsigned int esr, struct pt_regs *regs)
-{
-	int rt = (esr & ESR_ELx_SYS64_ISS_RT_MASK) >> ESR_ELx_SYS64_ISS_RT_SHIFT;
-
-	isb();
-	if (rt != 31)
-		regs->regs[rt] = arch_counter_get_cntvct();
-	regs->pc += 4;
-}
-
-static void cntfrq_read_handler(unsigned int esr, struct pt_regs *regs)
-{
-	int rt = (esr & ESR_ELx_SYS64_ISS_RT_MASK) >> ESR_ELx_SYS64_ISS_RT_SHIFT;
-
-	if (rt != 31)
-		regs->regs[rt] = read_sysreg(cntfrq_el0);
-	regs->pc += 4;
-}
-
-asmlinkage void __exception do_sysinstr(unsigned int esr, struct pt_regs *regs)
-{
-	if ((esr & ESR_ELx_SYS64_ISS_SYS_OP_MASK) == ESR_ELx_SYS64_ISS_SYS_CNTVCT) {
-		cntvct_read_handler(esr, regs);
-		return;
-	} else if ((esr & ESR_ELx_SYS64_ISS_SYS_OP_MASK) == ESR_ELx_SYS64_ISS_SYS_CNTFRQ) {
-		cntfrq_read_handler(esr, regs);
-		return;
-	}
-
-	do_undefinstr(regs);
 }
 
 long compat_arm_syscall(struct pt_regs *regs);
@@ -529,6 +503,10 @@ asmlinkage void bad_el0_sync(struct pt_regs *regs, int reason, unsigned int esr)
 
 	pr_crit("Bad mode in %s handler detected, code 0x%08x -- %s\n",
 		handler[reason], esr, esr_get_class_string(esr));
+#ifdef CONFIG_FASTBOOT_DUMP
+	fastboot_dump_s_reason_set(FD_S_APANIC_BAD_MODE);
+	fastboot_dump_s_reason_str_set_format("Bad_mode_%s",handler[reason]);
+#endif
 	__show_regs(regs);
 
 	info.si_signo = SIGILL;

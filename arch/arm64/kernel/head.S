@@ -206,7 +206,7 @@ section_table:
 	.align 12
 #endif
 
-ENTRY(stext)
+ENTRY_NOTAG(stext)
 	bl	preserve_boot_args
 	bl	el2_setup			// Drop to EL1, w20=cpu_boot_mode
 	adrp	x24, __PHYS_OFFSET
@@ -456,18 +456,10 @@ __mmap_switched:
 	bl	__pi_memset
 	dsb	ishst				// Make zero page visible to PTW
 
-#ifdef CONFIG_THREAD_INFO_IN_TASK
-        adrp    x4, init_thread_union
-        add     sp, x4, #THREAD_SIZE
-        adr_l   x5, init_task
-        msr     sp_el0, x5                      // Save thread_info
-#else
 	adr_l	sp, initial_sp, x4
 	mov	x4, sp
 	and	x4, x4, #~(THREAD_SIZE - 1)
 	msr	sp_el0, x4			// Save thread_info
-#endif
-
 	str_l	x21, __fdt_pointer, x5		// Save FDT pointer
 	str_l	x24, memstart_addr, x6		// Save PHYS_OFFSET
 	mov	x29, #0
@@ -598,7 +590,7 @@ ENDPROC(set_cpu_boot_mode_flag)
  * zeroing of .bss would clobber it.
  */
 	.pushsection	.data..cacheline_aligned
-ENTRY(__boot_cpu_mode)
+ENTRY_NOTAG(__boot_cpu_mode)
 	.align	L1_CACHE_SHIFT
 	.long	BOOT_CPU_MODE_EL2
 	.long	0
@@ -612,7 +604,7 @@ ENTRY(__boot_cpu_mode)
 	 * This provides a "holding pen" for platforms to hold all secondary
 	 * cores are held until we're ready for them to initialise.
 	 */
-ENTRY(secondary_holding_pen)
+ENTRY_NOTAG(secondary_holding_pen)
 	bl	el2_setup			// Drop to EL1, w20=cpu_boot_mode
 	bl	set_cpu_boot_mode_flag
 	mrs	x0, mpidr_el1
@@ -649,18 +641,10 @@ ENTRY(secondary_startup)
 ENDPROC(secondary_startup)
 
 ENTRY(__secondary_switched)
-#ifdef CONFIG_THREAD_INFO_IN_TASK
-	adr_l	x0, secondary_data
-	ldr	x1, [x0, #CPU_BOOT_STACK]	// get secondary_data.stack
-	mov	sp, x1
-	ldr	x2, [x0, #CPU_BOOT_TASK]
-	msr	sp_el0, x2
-#else
 	ldr	x0, [x21]			// get secondary_data.stack
 	mov	sp, x0
 	and	x0, x0, #~(THREAD_SIZE - 1)
 	msr	sp_el0, x0			// save thread_info
-#endif
 	mov	x29, #0
 	b	secondary_start_kernel
 ENDPROC(__secondary_switched)

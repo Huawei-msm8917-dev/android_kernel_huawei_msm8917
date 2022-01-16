@@ -70,6 +70,8 @@ config ARM64
 	select HAVE_PERF_EVENTS
 	select HAVE_PERF_REGS
 	select HAVE_PERF_USER_STACK_DUMP
+	select HAVE_KPROBES
+	select HAVE_KRETPROBES if HAVE_KPROBES
 	select HAVE_RCU_TABLE_FREE
 	select HAVE_SYSCALL_TRACEPOINTS
 	select IRQ_DOMAIN
@@ -85,8 +87,8 @@ config ARM64
 	select SPARSE_IRQ
 	select SYSCTL_EXCEPTION_TRACE
 	select HAVE_CONTEXT_TRACKING
-	select THREAD_INFO_IN_TASK
 	select MSM_JTAGV8 if CORESIGHT_ETMV4
+	select HAVE_LIVEPATCH
 	help
 	  ARM 64-bit (AArch64) Linux support.
 
@@ -237,6 +239,8 @@ config MSM_GVM_QUIN
 source "init/Kconfig"
 
 source "kernel/Kconfig.freezer"
+
+source "kernel/livepatch/Kconfig"
 
 menu "Platform selection"
 
@@ -802,35 +806,6 @@ config FORCE_MAX_ZONEORDER
 	default "14" if (ARM64_64K_PAGES && TRANSPARENT_HUGEPAGE)
 	default "11"
 
-config UNMAP_KERNEL_AT_EL0
-	bool "Unmap kernel when running in userspace (aka \"KAISER\")" if EXPERT
-	default y
-	help
-	  Speculation attacks against some high-performance processors can
-	  be used to bypass MMU permission checks and leak kernel data to
-	  userspace. This can be defended against by unmapping the kernel
-	  when running in userspace, mapping it back in on exception entry
-	  via a trampoline page in the vector table.
-
-	  If unsure, say Y.
-
-config HARDEN_BRANCH_PREDICTOR
-	bool "Harden the branch predictor against aliasing attacks" if EXPERT
-	default y
-	help
-	  Speculation attacks against some high-performance processors rely on
-	  being able to manipulate the branch predictor for a victim context by
-	  executing aliasing branches in the attacker context.  Such attacks
-	  can be partially mitigated against by clearing internal branch
-	  predictor state and limiting the prediction logic in some situations.
-
-	  This config option will take CPU-specific actions to harden the
-	  branch predictor against aliasing attacks and may rely on specific
-	  instruction sequences or control bits being set by the system
-	  firmware.
-
-	  If unsure, say Y.
-
 menuconfig ARMV8_DEPRECATED
 	bool "Emulate deprecated/obsolete ARMv8 instructions"
 	depends on COMPAT
@@ -1136,6 +1111,19 @@ source "crypto/Kconfig"
 if CRYPTO
 source "arch/arm64/crypto/Kconfig"
 endif
+
+config HUAWEI_KERNEL
+        bool "Use huawei code"
+        default n
+        help
+          use huawei code
+
+config HUAWEI_KERNEL_DEBUG
+        bool "Use Huawei kernel debug mode"
+        depends on HUAWEI_KERNEL
+        default n
+        help
+          Enable sysrq, dump mode and some debug masks by default.
 
 source "lib/Kconfig"
 

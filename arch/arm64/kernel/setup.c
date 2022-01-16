@@ -61,7 +61,14 @@
 #include <asm/memblock.h>
 #include <asm/psci.h>
 #include <asm/efi.h>
-#include <asm/system_misc.h>
+
+#ifdef CONFIG_DUMP_SYS_INFO
+#include <linux/module.h>
+#include <linux/srecorder.h>
+#endif
+
+char* (*arch_read_hardware_id)(void);
+EXPORT_SYMBOL(arch_read_hardware_id);
 
 unsigned int boot_reason;
 EXPORT_SYMBOL(boot_reason);
@@ -69,10 +76,23 @@ EXPORT_SYMBOL(boot_reason);
 unsigned int cold_boot;
 EXPORT_SYMBOL(cold_boot);
 
-char* (*arch_read_hardware_id)(void);
-const char *machine_name;
-
+static const char *machine_name;
 phys_addr_t __fdt_pointer __initdata;
+
+#ifdef CONFIG_DUMP_SYS_INFO
+/*
+unsigned long get_cpu_name(void)
+{
+    return (unsigned long)&cpu_name;
+}
+EXPORT_SYMBOL(get_cpu_name);
+*/
+unsigned long get_machine_name(void)
+{
+    return (unsigned long)&machine_name;
+}
+EXPORT_SYMBOL(get_machine_name);
+#endif
 
 /*
  * Standard memory resources

@@ -157,8 +157,8 @@ ENTRY(flush_icache_range)
  *	- start   - virtual start address of region
  *	- end     - virtual end address of region
  */
-ENTRY(__flush_cache_user_range)
-	uaccess_ttbr0_enable x2, x3, x4
+ENTRY_NOTAG(__flush_cache_user_range)
+	uaccess_ttbr0_enable x2, x3
 	dcache_line_size x2, x3
 	sub	x3, x2, #1
 	bic	x4, x0, x3
@@ -180,7 +180,7 @@ USER(9f, ic	ivau, x4	)		// invalidate I line PoU
 9:						// ignore any faulting cache operation
 	dsb	ish
 	isb
-	uaccess_ttbr0_disable x1, x2
+	uaccess_ttbr0_disable x1
 	ret
 ENDPROC(flush_icache_range)
 ENDPROC(__flush_cache_user_range)
@@ -220,7 +220,7 @@ ENTRY(__inval_cache_range)
  *	- start   - virtual start address of region
  *	- end     - virtual end address of region
  */
-ENTRY(__dma_inv_range)
+ENTRY_NOTAG(__dma_inv_range)
 	dcache_line_size x2, x3
 	sub	x3, x2, #1
 	tst	x1, x3				// end cache line aligned?
