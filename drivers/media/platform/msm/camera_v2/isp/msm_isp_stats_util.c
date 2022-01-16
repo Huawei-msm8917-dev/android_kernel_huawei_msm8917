@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -225,7 +225,7 @@ static int32_t msm_isp_stats_buf_divert(struct vfe_device *vfe_dev,
 		rc = vfe_dev->buf_mgr->ops->buf_done(
 			vfe_dev->buf_mgr,
 			done_buf->bufq_handle,
-			done_buf->buf_idx, &ts->buf_time, frame_id, 0);
+			done_buf->buf_idx, &ts->buf_time, frame_id, 0, false);
 		if (rc == -EFAULT)
 			msm_isp_halt_send_error(vfe_dev,
 					ISP_EVENT_BUF_FATAL_ERROR);
@@ -320,7 +320,7 @@ void msm_isp_process_stats_irq(struct vfe_device *vfe_dev,
 		get_comp_mask(irq_status0, irq_status1);
 	stats_irq_mask = vfe_dev->hw_info->vfe_ops.stats_ops.
 		get_wm_mask(irq_status0, irq_status1);
-	if (!(stats_comp_mask || stats_irq_mask))
+	if (!(stats_comp_mask || stats_irq_mask) || vfe_dev->ignore_irq)
 		return;
 
 	ISP_DBG("%s: vfe %d status: 0x%x\n", __func__, vfe_dev->pdev->id,
@@ -683,23 +683,18 @@ static int msm_isp_start_stats_stream(struct vfe_device *vfe_dev,
 			stream_cfg_cmd->num_streams);
 		return -EINVAL;
 	}
-	mutex_lock(&vfe_dev->buf_mgr->lock);
-
 	num_stats_comp_mask =
 		vfe_dev->hw_info->stats_hw_info->num_stats_comp_mask;
 	rc = vfe_dev->hw_info->vfe_ops.stats_ops.check_streams(
 		stats_data->stream_info);
-	if (rc < 0) {
-		mutex_unlock(&vfe_dev->buf_mgr->lock);
+	if (rc < 0)
 		return rc;
-	}
 
 	for (i = 0; i < stream_cfg_cmd->num_streams; i++) {
 		idx = STATS_IDX(stream_cfg_cmd->stream_handle[i]);
 
 		if (idx >= vfe_dev->hw_info->stats_hw_info->num_stats_type) {
 			pr_err("%s Invalid stats index %d", __func__, idx);
-			mutex_unlock(&vfe_dev->buf_mgr->lock);
 			return -EINVAL;
 		}
 
@@ -715,13 +710,11 @@ static int msm_isp_start_stats_stream(struct vfe_device *vfe_dev,
 			pr_err("%s: comp grp %d exceed max %d\n",
 				__func__, stream_info->composite_flag,
 				num_stats_comp_mask);
-			mutex_unlock(&vfe_dev->buf_mgr->lock);
 			return -EINVAL;
 		}
 		rc = msm_isp_init_stats_ping_pong_reg(vfe_dev, stream_info);
 		if (rc < 0) {
 			pr_err("%s: No buffer for stream%d\n", __func__, idx);
-			mutex_unlock(&vfe_dev->buf_mgr->lock);
 			return rc;
 		}
 		if (!stream_info->composite_flag)
@@ -746,7 +739,6 @@ static int msm_isp_start_stats_stream(struct vfe_device *vfe_dev,
 			stats_data->num_active_stream);
 
 	}
-	mutex_unlock(&vfe_dev->buf_mgr->lock);
 
 	if (vfe_dev->axi_data.src_info[VFE_PIX_0].active) {
 		rc = msm_isp_stats_wait_for_cfg_done(vfe_dev);
