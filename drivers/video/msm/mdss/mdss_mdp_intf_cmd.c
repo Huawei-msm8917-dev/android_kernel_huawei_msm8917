@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -21,7 +21,10 @@
 #include "mdss_debug.h"
 #include "mdss_mdp_trace.h"
 #include "mdss_dsi_clk.h"
-#include <linux/interrupt.h>
+#ifdef CONFIG_LCDKIT_DRIVER
+#include <linux/lcdkit_dsm.h>
+#include "lcdkit_dsi_status.h"
+#endif
 
 #define MAX_RECOVERY_TRIALS 10
 #define MAX_SESSIONS 2
@@ -1206,8 +1209,7 @@ static void mdss_mdp_cmd_pingpong_done(void *arg)
 			       atomic_read(&ctx->koff_cnt));
 		if (sync_ppdone) {
 			atomic_inc(&ctx->pp_done_cnt);
-			if (!ctl->commit_in_progress)
-				schedule_work(&ctx->pp_done_work);
+			schedule_work(&ctx->pp_done_work);
 
 			mdss_mdp_resource_control(ctl,
 				MDP_RSRC_CTL_EVENT_PP_DONE);
@@ -1902,7 +1904,7 @@ static int mdss_mdp_cmd_wait4pingpong(struct mdss_mdp_ctl *ctl, void *arg)
 	struct mdss_mdp_cmd_ctx *ctx;
 	struct mdss_panel_data *pdata;
 	unsigned long flags;
-	int rc = 0, te_irq;
+	int rc = 0;
 
 	ctx = (struct mdss_mdp_cmd_ctx *) ctl->intf_ctx[MASTER_CTX];
 	if (!ctx) {
@@ -1949,21 +1951,7 @@ static int mdss_mdp_cmd_wait4pingpong(struct mdss_mdp_ctl *ctl, void *arg)
 				__func__,
 				ctl->num, rc, ctx->pp_timeout_report_cnt,
 				atomic_read(&ctx->koff_cnt));
-
-		/* enable TE irq to check if it is coming from the panel */
-		te_irq = gpio_to_irq(pdata->panel_te_gpio);
-		enable_irq(te_irq);
-
-		/* wait for 20ms to ensure we are getting the next TE */
-		usleep_range(20000, 20010);
-
-		reinit_completion(&pdata->te_done);
-		rc = wait_for_completion_timeout(&pdata->te_done, KOFF_TIMEOUT);
-
-		if (!rc) {
-			MDSS_XLOG(0xbac);
-			mdss_fb_report_panel_dead(ctl->mfd);
-		} else if (ctx->pp_timeout_report_cnt == 0) {
+		if (ctx->pp_timeout_report_cnt == 0) {
 			MDSS_XLOG(0xbad);
 			MDSS_XLOG_TOUT_HANDLER("mdp", "dsi0_ctrl", "dsi0_phy",
 				"dsi1_ctrl", "dsi1_phy", "vbif", "vbif_nrt",
@@ -1974,11 +1962,15 @@ static int mdss_mdp_cmd_wait4pingpong(struct mdss_mdp_ctl *ctl, void *arg)
 				"dsi1_ctrl", "dsi1_phy", "vbif", "vbif_nrt",
 				"dbg_bus", "vbif_dbg_bus", "panic");
 			mdss_fb_report_panel_dead(ctl->mfd);
+#ifdef CONFIG_HUAWEI_DSM
+			/* report pingpong dsm error */
+			#ifdef CONFIG_LCDKIT_DRIVER
+			lcdkit_report_dsm_err(DSM_LCD_MDSS_PINGPONG_ERROR_NO,0,rc,0);
+			#else
+			lcd_report_dsm_err(DSM_LCD_MDSS_PINGPONG_ERROR_NO,rc,0);
+			#endif
+#endif
 		}
-
-		/* disable te irq */
-		disable_irq_nosync(te_irq);
-
 		ctx->pp_timeout_report_cnt++;
 		rc = -EPERM;
 
@@ -2132,6 +2124,10 @@ static int mdss_mdp_cmd_panel_on(struct mdss_mdp_ctl *ctl,
 		WARN(rc, "intf %d tearcheck enable error (%d)\n",
 				ctl->intf_num, rc);
 
+	/*schedule the esd delay work*/
+#if defined(CONFIG_HUAWEI_KERNEL_LCD) || defined(CONFIG_LCDKIT_DRIVER)
+			mdss_dsi_status_check_ctl(ctl->mfd,true);
+#endif
 		ctx->panel_power_state = MDSS_PANEL_POWER_ON;
 		if (sctx)
 			sctx->panel_power_state = MDSS_PANEL_POWER_ON;
@@ -2937,6 +2933,10 @@ static int mdss_mdp_cmd_intfs_stop(struct mdss_mdp_ctl *ctl, int session,
 		return -ENODEV;
 	}
 
+	/*cancel the esd delay work*/
+#ifdef CONFIG_LCDKIT_DRIVER
+	mdss_dsi_status_check_ctl(ctl->mfd,false);
+#endif
 	mdss_mdp_cmd_ctx_stop(ctl, ctx, panel_power_state);
 
 	if (is_pingpong_split(ctl->mfd)) {

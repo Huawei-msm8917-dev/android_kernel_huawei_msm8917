@@ -99,6 +99,9 @@ enum dsi_panel_bl_ctrl {
 	BL_PWM,
 	BL_WLED,
 	BL_DCS_CMD,
+	#ifdef CONFIG_LCDKIT_DRIVER
+	BL_IC_TI,
+	#endif
 	UNKNOWN_CTRL,
 };
 
@@ -431,6 +434,11 @@ struct mdss_dsi_ctrl_pdata {
 	int disp_te_gpio;
 	int rst_gpio;
 	int disp_en_gpio;
+
+	#ifdef CONFIG_LCDKIT_DRIVER
+	int disp_bl_gpio;
+	#endif
+
 	int bklt_en_gpio;
 	int mode_gpio;
 	int intf_mux_gpio;
@@ -595,7 +603,6 @@ int mdss_dsi_wait_for_lane_idle(struct mdss_dsi_ctrl_pdata *ctrl);
 
 irqreturn_t mdss_dsi_isr(int irq, void *ptr);
 irqreturn_t hw_vsync_handler(int irq, void *data);
-void disable_esd_thread(void);
 void mdss_dsi_irq_handler_config(struct mdss_dsi_ctrl_pdata *ctrl_pdata);
 
 void mdss_dsi_set_tx_power_mode(int mode, struct mdss_panel_data *pdata);

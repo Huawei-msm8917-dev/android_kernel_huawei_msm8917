@@ -1,7 +1,7 @@
 /*
  * MDSS MDP Interface (used by framebuffer core)
  *
- * Copyright (c) 2007-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2007-2017, The Linux Foundation. All rights reserved.
  * Copyright (C) 2007 Google Incorporated
  *
  * This software is licensed under the terms of the GNU General Public
@@ -57,7 +57,9 @@
 #include "mdss_smmu.h"
 
 #include "mdss_mdp_trace.h"
-
+#ifdef CONFIG_LCDKIT_DRIVER
+#include <linux/lcdkit_dsm.h>
+#endif
 #define AXI_HALT_TIMEOUT_US	0x4000
 #define AUTOSUSPEND_TIMEOUT_MS	200
 #define DEFAULT_MDP_PIPE_WIDTH	2048
@@ -782,7 +784,7 @@ void mdss_mdp_irq_clear(struct mdss_data_type *mdata,
 
 int mdss_mdp_irq_enable(u32 intr_type, u32 intf_num)
 {
-	int irq_idx = 0;
+	int irq_idx, idx;
 	unsigned long irq_flags;
 	int ret = 0;
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
@@ -801,7 +803,7 @@ int mdss_mdp_irq_enable(u32 intr_type, u32 intf_num)
 	spin_lock_irqsave(&mdp_lock, irq_flags);
 	if (mdata->mdp_irq_mask[irq.reg_idx] & irq.irq_mask) {
 		pr_warn("MDSS MDP IRQ-0x%x is already set, mask=%x\n",
-				irq.irq_mask, mdata->mdp_irq_mask[irq.reg_idx]);
+				irq.irq_mask, mdata->mdp_irq_mask[idx]);
 		ret = -EBUSY;
 	} else {
 		pr_debug("MDP IRQ mask old=%x new=%x\n",
@@ -1488,6 +1490,12 @@ void mdss_mdp_clk_ctrl(int enable)
 				changed++;
 		} else {
 			pr_err("Can not be turned off\n");
+#ifdef CONFIG_HUAWEI_DSM
+			/* report mdp clk dsm error */
+			#ifdef CONFIG_LCDKIT_DRIVER
+			lcdkit_report_dsm_err(DSM_LCD_MDSS_MDP_CLK_ERROR_NO,0,0,0);
+			#endif
+#endif
 		}
 	}
 
@@ -1594,7 +1602,12 @@ static int mdss_mdp_gdsc_notifier_call(struct notifier_block *self,
 
 	mdata = container_of(self, struct mdss_data_type, gdsc_cb);
 
+#ifdef CONFIG_LCDKIT_DRIVER
+	if (!mdss_mdp_req_init_restore_cfg(mdata) &&
+		(event & REGULATOR_EVENT_ENABLE)) {
+#else
 	if (event & REGULATOR_EVENT_ENABLE) {
+#endif
 		/*
 		 * As SMMU in low tier targets is not power collapsible,
 		 * hence we don't need to restore sec configuration.
@@ -1763,8 +1776,8 @@ static void mdss_mdp_hw_rev_caps_init(struct mdss_data_type *mdata)
 	mdata->hflip_buffer_reused = true;
 	/* prevent disable of prefill calculations */
 	mdata->min_prefill_lines = 0xffff;
-	/* clock gating feature is disabled by default */
-	mdata->enable_gate = false;
+	/* clock gating feature is enabled by default */
+	mdata->enable_gate = true;
 	mdata->pixel_ram_size = 0;
 	mem_protect_sd_ctrl_id = MEM_PROTECT_SD_CTRL_FLAT;
 
@@ -2080,8 +2093,6 @@ static u32 mdss_mdp_scaler_init(struct mdss_data_type *mdata,
 		if (ret)
 			return -EINVAL;
 	}
-
-	mutex_init(&mdata->scaler_off->scaler_lock);
 
 	return 0;
 }
