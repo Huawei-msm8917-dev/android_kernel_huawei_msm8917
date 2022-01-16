@@ -33,6 +33,10 @@
 #include "core.h"
 #include "host.h"
 
+#ifdef CONFIG_HUAWEI_SDCARD_DSM
+#include <linux/mmc/dsm_sdcard.h>
+#endif
+
 #define cls_dev_to_mmc_host(d)	container_of(d, struct mmc_host, class_dev)
 #define MMC_DEVFRQ_DEFAULT_UP_THRESHOLD 35
 #define MMC_DEVFRQ_DEFAULT_DOWN_THRESHOLD 5
@@ -319,7 +323,6 @@ void mmc_retune_enable(struct mmc_host *host)
 		mod_timer(&host->retune_timer,
 			  jiffies + host->retune_period * HZ);
 }
-EXPORT_SYMBOL(mmc_retune_enable);
 
 void mmc_retune_disable(struct mmc_host *host)
 {
@@ -328,7 +331,6 @@ void mmc_retune_disable(struct mmc_host *host)
 	host->retune_now = 0;
 	host->need_retune = 0;
 }
-EXPORT_SYMBOL(mmc_retune_disable);
 
 void mmc_retune_timer_stop(struct mmc_host *host)
 {
@@ -591,6 +593,11 @@ struct mmc_host *mmc_alloc_host(int extra, struct device *dev)
 	host->slot.cd_irq = -EINVAL;
 
 	spin_lock_init(&host->lock);
+
+#ifdef CONFIG_HUAWEI_SDCARD_DSM
+	sdcard_dsm_dclient_init();
+#endif
+
 	init_waitqueue_head(&host->wq);
 	INIT_DELAYED_WORK(&host->detect, mmc_rescan);
 #ifdef CONFIG_PM
