@@ -126,6 +126,12 @@ typedef void (dio_iodone_t)(struct kiocb *iocb, loff_t offset,
 /* File is opened with O_PATH; almost nothing can be done with it */
 #define FMODE_PATH		((__force fmode_t)0x4000)
 
+/* File hasn't page cache and can't be mmaped, for stackable filesystem */
+#define FMODE_NOMAPPABLE        ((__force fmode_t)0x8000)
+
+/* File page don't need to be cached, for stackable filesystem's lower file */
+#define FMODE_NOCACHEABLE		((__force fmode_t)0x10000)
+
 /* File needs atomic accesses to f_pos */
 #define FMODE_ATOMIC_POS	((__force fmode_t)0x8000)
 /* Write access to underlying fs */
@@ -637,6 +643,10 @@ struct inode {
 #endif
 
 	void			*i_private; /* fs or device private pointer */
+
+#ifdef CONFIG_TASK_PROTECT_LRU
+	int			i_protect;
+#endif
 };
 
 static inline int inode_unhashed(struct inode *inode)
@@ -1541,6 +1551,8 @@ struct file_operations {
 	long (*fallocate)(struct file *file, int mode, loff_t offset,
 			  loff_t len);
 	int (*show_fdinfo)(struct seq_file *m, struct file *f);
+	/* get_lower_file is for stackable file system */
+	struct file* (*get_lower_file)(struct file *f);
 };
 
 struct inode_operations {
@@ -1752,12 +1764,8 @@ struct super_operations {
 #define __I_DIO_WAKEUP		9
 #define I_DIO_WAKEUP		(1 << I_DIO_WAKEUP)
 #define I_LINKABLE		(1 << 10)
-#define I_DIRTY_TIME		(1 << 11)
-#define __I_DIRTY_TIME_EXPIRED	12
-#define I_DIRTY_TIME_EXPIRED	(1 << __I_DIRTY_TIME_EXPIRED)
 
 #define I_DIRTY (I_DIRTY_SYNC | I_DIRTY_DATASYNC | I_DIRTY_PAGES)
-#define I_DIRTY_ALL (I_DIRTY | I_DIRTY_TIME)
 
 extern void __mark_inode_dirty(struct inode *, int);
 static inline void mark_inode_dirty(struct inode *inode)
@@ -1923,7 +1931,6 @@ extern int current_umask(void);
 
 extern void ihold(struct inode * inode);
 extern void iput(struct inode *);
-extern int generic_update_time(struct inode *, struct timespec *, int);
 
 static inline struct inode *file_inode(const struct file *f)
 {

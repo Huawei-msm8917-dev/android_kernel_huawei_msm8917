@@ -24,6 +24,9 @@
 #include <linux/mmc/ring_buffer.h>
 
 #define MMC_AUTOSUSPEND_DELAY_MS	3000
+#ifdef CONFIG_HW_MMC_TEST
+#define CARD_ADDR_MAGIC 0xA5A55A5AA5A55A5ALL
+#endif
 
 struct mmc_ios {
 	unsigned int	clock;			/* clock rate */
@@ -532,6 +535,13 @@ struct mmc_host {
 	unsigned int		retune_period;	/* re-tuning period in secs */
 	struct timer_list	retune_timer;	/* for periodic re-tuning */
 
+#ifdef CONFIG_HUAWEI_KERNEL
+	unsigned int         change_slot;/*sd slot change*/
+	unsigned int         sd_init_retry_cnt;
+	unsigned int         sd_present;
+	unsigned int         sd_acmd41_timeout_cnt;
+#endif
+
 	bool			trigger_card_event; /* card_event necessary */
 
 	struct mmc_card		*card;		/* device attached to this host */
@@ -551,7 +561,6 @@ struct mmc_host {
 	unsigned int		bus_resume_flags;
 #define MMC_BUSRESUME_MANUAL_RESUME	(1 << 0)
 #define MMC_BUSRESUME_NEEDS_RESUME	(1 << 1)
-	bool ignore_bus_resume_flags;
 
 	unsigned int		sdio_irqs;
 	struct task_struct	*sdio_irq_thread;
@@ -582,6 +591,10 @@ struct mmc_host {
 
 	unsigned int		slotno;	/* used for sdio acpi binding */
 
+#ifdef CONFIG_MMC_BLOCK_DEFERRED_RESUME
+	bool		slot_detect_change_flag;
+#endif
+
 	int			dsr_req;	/* DSR value is valid */
 	u32			dsr;	/* optional driver stage (DSR) value */
 
@@ -599,6 +612,7 @@ struct mmc_host {
 	 * actually disabling the clock from it's source.
 	 */
 	bool			card_clock_off;
+	unsigned int		crc_count;
 
 #ifdef CONFIG_MMC_PERF_PROFILING
 	struct {
@@ -834,8 +848,6 @@ static inline bool mmc_card_hs400(struct mmc_card *card)
 	return card->host->ios.timing == MMC_TIMING_MMC_HS400;
 }
 
-void mmc_retune_enable(struct mmc_host *host);
-void mmc_retune_disable(struct mmc_host *host);
 void mmc_retune_timer_stop(struct mmc_host *host);
 
 static inline void mmc_retune_needed(struct mmc_host *host)

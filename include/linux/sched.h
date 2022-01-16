@@ -133,6 +133,7 @@ struct fs_struct;
 struct perf_event_context;
 struct blk_plug;
 struct filename;
+struct group_pids;
 
 #define VMACACHE_BITS 2
 #define VMACACHE_SIZE (1U << VMACACHE_BITS)
@@ -271,6 +272,21 @@ extern char ___assert_task_state[1 - 2*!!(
 #define TASK_COMM_LEN 16
 
 extern const char *sched_window_reset_reasons[];
+
+#ifdef CONFIG_HW_VIP_THREAD
+enum DYNAMIC_VIP_TYPE
+{
+	DYNAMIC_VIP_BINDER = 0,
+	DYNAMIC_VIP_RWSEM,
+	DYNAMIC_VIP_MUTEX,
+	DYNAMIC_VIP_SEM,
+	DYNAMIC_VIP_FUTEX,
+	DYNAMIC_VIP_MAX,
+};
+
+#define VIP_MSG_LEN 64
+#define VIP_DEPTH_MAX 2
+#endif
 
 enum task_event {
 	PUT_PREV_TASK   = 0,
@@ -732,10 +748,23 @@ struct signal_struct {
 	short oom_score_adj_min;	/* OOM kill score adjustment min value.
 					 * Only settable by CAP_SYS_RESOURCE. */
 
+#ifdef CONFIG_HW_DIE_CATCH
+	unsigned short unexpected_die_catch_flags; /* Only settable by CAP_SYS_RESOURCE and task*/
+#endif
+
 	struct mutex cred_guard_mutex;	/* guard against foreign influences on
 					 * credential calculations
 					 * (notably. ptrace) */
 };
+
+#ifdef CONFIG_HW_DIE_CATCH
+/*  if the process will die by SIGKILL,SIGTERM , it will send SIGABORT to notify userspace*/
+#define KILL_CATCH_FLAG     (0x1)
+/*  if the process will die by system call exit , it will print the log*/
+#define EXIT_CATCH_FLAG     (0x2)
+/*  if the process will die by system call exit , it will send SIGABORT to notify userspace*/
+#define EXIT_CATCH_ABORT_FLAG       (0x4)
+#endif
 
 /*
  * Bits in flags field of signal_struct.
@@ -863,6 +892,15 @@ struct task_delay_info {
 	u64 freepages_start;
 	u64 freepages_delay;	/* wait for memory reclaim */
 	u32 freepages_count;	/* total count of memory reclaim */
+
+#ifdef CONFIG_HW_MEMORY_MONITOR
+	spinlock_t	allocpages_lock;
+	u64 allocpages_start;
+	u64 allocpages_delay;	/* wait for memoroy slowpath allocation */
+	u64 allocpages_count;	/* total count of memory slowpath allocation */
+	u64 allocpages_delay_max;
+	u64 allocpages_delay_max_order;
+#endif
 };
 #endif	/* CONFIG_TASK_DELAY_ACCT */
 
@@ -1316,12 +1354,29 @@ enum perf_event_task_context {
 	perf_nr_task_contexts,
 };
 
+#ifdef CONFIG_HUAWEI_SWAP_ZDATA
+struct reclaim_result {
+	unsigned nr_reclaimed;
+	unsigned nr_writedblock;
+	s64 elapsed_centisecs64;
+};
+#endif
+
 struct task_struct {
 	volatile long state;	/* -1 unrunnable, 0 runnable, >0 stopped */
 	void *stack;
 	atomic_t usage;
 	unsigned int flags;	/* per process flags, defined below */
 	unsigned int ptrace;
+
+#ifdef CONFIG_HW_VIP_THREAD
+	int static_vip;
+	atomic64_t dynamic_vip;
+	struct list_head vip_entry;
+	int vip_depth;
+	u64 enqueue_time;
+	u64 dynamic_vip_start;
+#endif
 
 #ifdef CONFIG_SMP
 	struct llist_node wake_entry;
@@ -1404,7 +1459,7 @@ struct task_struct {
 	unsigned brk_randomized:1;
 #endif
 	/* per-thread vma caching */
-	u64 vmacache_seqnum;
+	u32 vmacache_seqnum;
 	struct vm_area_struct *vmacache[VMACACHE_SIZE];
 #if defined(SPLIT_RSS_COUNTING)
 	struct task_rss_stat	rss_stat;
@@ -1628,6 +1683,10 @@ struct task_struct {
 	/* cg_list protected by css_set_lock and tsk->alloc_lock */
 	struct list_head cg_list;
 #endif
+#ifdef CONFIG_HW_CGROUP_PIDS
+        struct list_head group_pids_list;
+        struct group_pids *group_pids;
+#endif
 #ifdef CONFIG_FUTEX
 	struct robust_list_head __user *robust_list;
 #ifdef CONFIG_COMPAT
@@ -1781,6 +1840,9 @@ struct task_struct {
 	unsigned int	sequential_io;
 	unsigned int	sequential_io_avg;
 #endif
+#ifdef CONFIG_HUAWEI_SWAP_ZDATA
+	struct reclaim_result *proc_reclaimed_result;
+#endif
 };
 
 /* Future-safe accessor for struct task_struct's cpus_allowed. */
@@ -1885,8 +1947,31 @@ static inline pid_t task_tgid_nr(struct task_struct *tsk)
 	return tsk->tgid;
 }
 
+pid_t task_tgid_nr_ns(struct task_struct *tsk, struct pid_namespace *ns);
+
+static inline pid_t task_tgid_vnr(struct task_struct *tsk)
+{
+	return pid_vnr(task_tgid(tsk));
+}
+
 
 static inline int pid_alive(const struct task_struct *p);
+static inline pid_t task_ppid_nr_ns(const struct task_struct *tsk, struct pid_namespace *ns)
+{
+	pid_t pid = 0;
+
+	rcu_read_lock();
+	if (pid_alive(tsk))
+		pid = task_tgid_nr_ns(rcu_dereference(tsk->real_parent), ns);
+	rcu_read_unlock();
+
+	return pid;
+}
+
+static inline pid_t task_ppid_nr(const struct task_struct *tsk)
+{
+	return task_ppid_nr_ns(tsk, &init_pid_ns);
+}
 
 static inline pid_t task_pgrp_nr_ns(struct task_struct *tsk,
 					struct pid_namespace *ns)
@@ -1909,33 +1994,6 @@ static inline pid_t task_session_nr_ns(struct task_struct *tsk,
 static inline pid_t task_session_vnr(struct task_struct *tsk)
 {
 	return __task_pid_nr_ns(tsk, PIDTYPE_SID, NULL);
-}
-
-static inline pid_t task_tgid_nr_ns(struct task_struct *tsk, struct pid_namespace *ns)
-{
-	return __task_pid_nr_ns(tsk, __PIDTYPE_TGID, ns);
-}
-
-static inline pid_t task_tgid_vnr(struct task_struct *tsk)
-{
-	return __task_pid_nr_ns(tsk, __PIDTYPE_TGID, NULL);
-}
-
-static inline pid_t task_ppid_nr_ns(const struct task_struct *tsk, struct pid_namespace *ns)
-{
-	pid_t pid = 0;
-
-	rcu_read_lock();
-	if (pid_alive(tsk))
-		pid = task_tgid_nr_ns(rcu_dereference(tsk->real_parent), ns);
-	rcu_read_unlock();
-
-	return pid;
-}
-
-static inline pid_t task_ppid_nr(const struct task_struct *tsk)
-{
-	return task_ppid_nr_ns(tsk, &init_pid_ns);
 }
 
 /* obsolete, do not use */
@@ -2141,6 +2199,9 @@ static inline void memalloc_noio_restore(unsigned int flags)
 #define PFA_SPREAD_PAGE  1      /* Spread page cache over cpuset */
 #define PFA_SPREAD_SLAB  2      /* Spread some slab caches over cpuset */
 
+#define PFA_SLEEP_ON_THROTL	25
+#define PFA_FLUSHER		26
+#define PFA_IN_PAGEFAULT	27
 
 #define TASK_PFA_TEST(name, func)					\
 	static inline bool task_##func(struct task_struct *p)		\
@@ -2162,6 +2223,18 @@ TASK_PFA_CLEAR(SPREAD_PAGE, spread_page)
 TASK_PFA_TEST(SPREAD_SLAB, spread_slab)
 TASK_PFA_SET(SPREAD_SLAB, spread_slab)
 TASK_PFA_CLEAR(SPREAD_SLAB, spread_slab)
+
+TASK_PFA_TEST(SLEEP_ON_THROTL, sleep_on_throtl)
+TASK_PFA_SET(SLEEP_ON_THROTL, sleep_on_throtl)
+TASK_PFA_CLEAR(SLEEP_ON_THROTL, sleep_on_throtl)
+
+TASK_PFA_TEST(FLUSHER, flusher)
+TASK_PFA_SET(FLUSHER, flusher)
+TASK_PFA_CLEAR(FLUSHER, flusher)
+
+TASK_PFA_TEST(IN_PAGEFAULT, in_pagefault)
+TASK_PFA_SET(IN_PAGEFAULT, in_pagefault)
+TASK_PFA_CLEAR(IN_PAGEFAULT, in_pagefault)
 
 /*
  * task->jobctl flags
