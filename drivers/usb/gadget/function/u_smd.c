@@ -1,7 +1,7 @@
 /*
  * u_smd.c - utilities for USB gadget serial over smd
  *
- * Copyright (c) 2011, 2013-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011, 2013-2017, The Linux Foundation. All rights reserved.
  *
  * This code also borrows from drivers/usb/gadget/u_serial.c, which is
  * Copyright (C) 2000 - 2003 Al Borchers (alborchers@steinerpoint.com)
@@ -51,9 +51,15 @@ struct smd_port_info smd_pi[SMD_N_PORTS] = {
 	{
 		.name = "DS",
 	},
+#ifndef CONFIG_HUAWEI_USB
 	{
 		.name = "UNUSED",
 	},
+#else
+	{
+		.name = "DATA2",
+	},
+#endif
 };
 
 struct gsmd_port {
@@ -495,7 +501,7 @@ static unsigned int convert_uart_sigs_to_acm(unsigned uart_sig)
 	unsigned int acm_sig = 0;
 
 	/* should this needs to be in calling functions ??? */
-	uart_sig &= (TIOCM_RI | TIOCM_CD | TIOCM_DSR | TIOCM_CTS);
+	uart_sig &= (TIOCM_RI | TIOCM_CD | TIOCM_DSR);
 
 	if (uart_sig & TIOCM_RI)
 		acm_sig |= SMD_ACM_CTRL_RI;
@@ -503,8 +509,6 @@ static unsigned int convert_uart_sigs_to_acm(unsigned uart_sig)
 		acm_sig |= SMD_ACM_CTRL_DCD;
 	if (uart_sig & TIOCM_DSR)
 		acm_sig |= SMD_ACM_CTRL_DSR;
-	if (uart_sig & TIOCM_CTS)
-		acm_sig |= SMD_ACM_CTRL_BRK;
 
 	return acm_sig;
 }
@@ -516,10 +520,18 @@ static unsigned int convert_acm_sigs_to_uart(unsigned acm_sig)
 	/* should this needs to be in calling functions ??? */
 	acm_sig &= (SMD_ACM_CTRL_DTR | SMD_ACM_CTRL_RTS);
 
+#ifdef CONFIG_HUAWEI_USB
+	if (acm_sig & SMD_ACM_CTRL_DTR) {
+		uart_sig |= TIOCM_DTR;
+	}
+
+	uart_sig |= TIOCM_RTS;
+#else
 	if (acm_sig & SMD_ACM_CTRL_DTR)
 		uart_sig |= TIOCM_DTR;
 	if (acm_sig & SMD_ACM_CTRL_RTS)
 		uart_sig |= TIOCM_RTS;
+#endif
 
 	return uart_sig;
 }
