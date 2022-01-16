@@ -35,6 +35,9 @@
 #include <linux/qdsp6v2/apr_tal.h>
 #include <linux/qdsp6v2/dsp_debug.h>
 #include <linux/ipc_logging.h>
+#ifdef CONFIG_HUAWEI_DSM_AUDIO
+#include <dsm_audio/dsm_audio.h>
+#endif
 
 #define SCM_Q6_NMI_CMD 0x1
 #define APR_PKT_IPC_LOG_PAGE_CNT 2
@@ -291,6 +294,9 @@ int apr_send_pkt(void *handle, uint32_t *buf)
 	if ((svc->dest_id == APR_DEST_QDSP6) &&
 	    (apr_get_q6_state() != APR_SUBSYS_LOADED)) {
 		pr_err("%s: Still dsp is not Up\n", __func__);
+#ifdef CONFIG_HUAWEI_DSM_AUDIO
+		audio_dsm_report_info(AUDIO_CODEC, DSM_AUDIO_MODEM_CRASH_ERROR_NO,"dsm audio mesg: modem still not up");
+#endif
 		return -ENETRESET;
 	} else if ((svc->dest_id == APR_DEST_MODEM) &&
 		   (apr_get_modem_state() == APR_SUBSYS_DOWN)) {
@@ -531,12 +537,6 @@ void apr_cb_func(void *buf, int len, void *priv)
 		pr_err("APR: Wrong paket size\n");
 		return;
 	}
-
-	if (hdr->pkt_size < hdr_size) {
-		pr_err("APR: Packet size less than header size\n");
-		return;
-	}
-
 	msg_type = hdr->hdr_field;
 	msg_type = (msg_type >> 0x08) & 0x0003;
 	if (msg_type >= APR_MSG_TYPE_MAX && msg_type != APR_BASIC_RSP_RESULT) {
@@ -614,8 +614,7 @@ void apr_cb_func(void *buf, int len, void *priv)
 
 	temp_port = ((data.dest_port >> 8) * 8) + (data.dest_port & 0xFF);
 	pr_debug("port = %d t_port = %d\n", data.src_port, temp_port);
-	if (((temp_port >= 0) && (temp_port < APR_MAX_PORTS))
-		&& (c_svc->port_cnt && c_svc->port_fn[temp_port]))
+	if (c_svc->port_cnt && c_svc->port_fn[temp_port])
 		c_svc->port_fn[temp_port](&data,  c_svc->port_priv[temp_port]);
 	else if (c_svc->fn)
 		c_svc->fn(&data, c_svc->priv);

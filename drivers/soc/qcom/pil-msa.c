@@ -534,7 +534,7 @@ int pil_mss_reset_load_mba(struct pil_desc *pil)
 	char *fw_name_p;
 	void *mba_dp_virt;
 	dma_addr_t mba_dp_phys, mba_dp_phys_end;
-	int ret;
+	int ret, count;
 	const u8 *data;
 	struct device *dma_dev = md->mba_mem_dev_fixed ?: &md->mba_mem_dev;
 
@@ -595,9 +595,10 @@ int pil_mss_reset_load_mba(struct pil_desc *pil)
 			&mba_dp_phys, &mba_dp_phys_end, drv->mba_dp_size);
 
 	/* Load the MBA image into memory */
-	if (fw->size <= SZ_1M) {
+	count = fw->size;
+	if (count <= SZ_1M) {
 		/* Ensures memcpy is done for max 1MB fw size */
-		memcpy(mba_dp_virt, data, fw->size);
+		memcpy(mba_dp_virt, data, count);
 	} else {
 		dev_err(pil->dev, "%s fw image loading into memory is failed due to fw size overflow\n",
 			__func__);
@@ -626,6 +627,9 @@ int pil_mss_reset_load_mba(struct pil_desc *pil)
 	ret = pil_mss_reset(pil);
 	if (ret) {
 		dev_err(pil->dev, "MBA boot failed.\n");
+#ifndef CONFIG_FINAL_RELEASE
+        BUG_ON("MBA boot failed.\n");
+#endif
 		goto err_mss_reset;
 	}
 

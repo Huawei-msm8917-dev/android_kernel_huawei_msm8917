@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -34,6 +34,7 @@
 #include <soc/qcom/socinfo.h>
 #include <soc/qcom/smem.h>
 #include <soc/qcom/boot_stats.h>
+#include "hw_sensor_info.h"
 
 #define BUILD_ID_LENGTH 32
 #define SMEM_IMAGE_VERSION_BLOCKS_COUNT 32
@@ -45,6 +46,7 @@
 #define SMEM_IMAGE_VERSION_OEM_SIZE 32
 #define SMEM_IMAGE_VERSION_OEM_OFFSET 96
 #define SMEM_IMAGE_VERSION_PARTITION_APPS 10
+#define HW_BOARDID_BEGIN_NUM 8000
 
 static DECLARE_RWSEM(current_image_rwsem);
 enum {
@@ -66,7 +68,6 @@ enum {
 	HW_PLATFORM_STP = 23,
 	HW_PLATFORM_SBC = 24,
 	HW_PLATFORM_ADP = 25,
-	HW_PLATFORM_TTP = 30,
 	HW_PLATFORM_INVALID
 };
 
@@ -88,7 +89,6 @@ const char *hw_platform[] = {
 	[HW_PLATFORM_STP] = "STP",
 	[HW_PLATFORM_SBC] = "SBC",
 	[HW_PLATFORM_ADP] = "ADP",
-	[HW_PLATFORM_TTP] = "TTP",
 };
 
 enum {
@@ -561,8 +561,6 @@ static struct msm_soc_info cpu_of_id[] = {
 
 	/* SDM450 ID */
 	[338] = {MSM_CPU_SDM450, "SDM450"},
-	[351] = {MSM_CPU_SDM450, "SDA450"},
-
 
 	/* 9607 IDs */
 	[290] = {MSM_CPU_9607, "MDM9607"},
@@ -598,9 +596,6 @@ static struct msm_soc_info cpu_of_id[] = {
 
 	/* MSM8940 IDs */
 	[313] = {MSM_CPU_8940, "MSM8940"},
-
-	/* MDM9150 IDs */
-	[359] = {MSM_CPU_9150, "MDM9150"},
 
 	/* Uninitialized IDs are not known to run Linux.
 	   MSM_CPU_UNKNOWN is set to 0 to ensure these IDs are
@@ -824,8 +819,33 @@ msm_get_hw_platform(struct device *dev,
 	uint32_t hw_type;
 	hw_type = socinfo_get_platform_type();
 
+    if(hw_type >= HW_BOARDID_BEGIN_NUM)
+    {
+        hw_type = HW_PLATFORM_MTP;
+    }else if(hw_type >= HW_PLATFORM_INVALID)
+    {
+        hw_type = HW_PLATFORM_UNKNOWN;
+    }
+
 	return snprintf(buf, PAGE_SIZE, "%-.32s\n",
 			hw_platform[hw_type]);
+}
+
+static ssize_t
+msm_get_huawei_product(struct device *dev,
+				struct device_attribute *attr,
+				char *buf)
+{
+    const char *product_ver = NULL;
+    if (NULL == buf)
+    {
+        pr_err("msm_get_huawei_product: buf is NULL!\n");
+        return -EINVAL;
+    }
+
+    product_ver = get_sensor_info_of_product_name();
+
+    return snprintf(buf, PAGE_SIZE, "%-.32s\n", product_ver);
 }
 
 static ssize_t
@@ -1171,6 +1191,8 @@ static struct device_attribute msm_soc_attr_build_id =
 static struct device_attribute msm_soc_attr_hw_platform =
 	__ATTR(hw_platform, S_IRUGO, msm_get_hw_platform, NULL);
 
+static struct device_attribute msm_soc_attr_huawei_product =
+	__ATTR(huawei_product, S_IRUSR|S_IRGRP, msm_get_huawei_product, NULL);
 
 static struct device_attribute msm_soc_attr_platform_version =
 	__ATTR(platform_version, S_IRUGO,
@@ -1383,6 +1405,8 @@ static void __init populate_soc_sysfs_files(struct device *msm_soc_device)
 	case SOCINFO_VERSION(0, 3):
 		device_create_file(msm_soc_device,
 					&msm_soc_attr_hw_platform);
+		device_create_file(msm_soc_device,
+					&msm_soc_attr_huawei_product);
 	case SOCINFO_VERSION(0, 2):
 		device_create_file(msm_soc_device,
 					&msm_soc_attr_raw_id);

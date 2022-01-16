@@ -1,5 +1,4 @@
-/* Copyright (c) 2011-2015, 2017-2018, The Linux Foundation.
- * All rights reserved.
+/* Copyright (c) 2011-2015, 2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -431,7 +430,7 @@ static ssize_t rpmstats_show(struct kobject *kobj,
 					prvdata);
 	}
 
-	ret = snprintf(buf, prvdata->len, "%s", prvdata->buf);
+	ret = snprintf(buf, prvdata->len, prvdata->buf);
 	iounmap(prvdata->reg_base);
 ioremap_fail:
 	kfree(prvdata);
@@ -478,6 +477,10 @@ fail:
 static int msm_rpmstats_probe(struct platform_device *pdev)
 {
 	struct dentry *dent = NULL;
+#ifdef CONFIG_HUAWEI_SLEEPLOG
+	struct dentry *dent_dir = NULL;
+	struct dentry *dent_rpmstats = NULL;
+#endif
 	struct msm_rpmstats_platform_data *pdata;
 	struct msm_rpmstats_platform_data *pd;
 	struct resource *res = NULL, *offset = NULL;
@@ -538,7 +541,20 @@ static int msm_rpmstats_probe(struct platform_device *pdev)
 			kfree(pdata);
 			return -ENOMEM;
 		}
-
+#ifdef CONFIG_HUAWEI_SLEEPLOG
+		dent_dir = debugfs_create_dir("rpmstats", NULL);
+		if (dent_dir == NULL) {
+			pr_err("%s: ERROR rpmstats debugfs_create_dir failed\n" , __func__);
+			return -ENOMEM;
+		}
+		dent_rpmstats = debugfs_create_file("rpm_stats", S_IRUGO, dent_dir,
+				pdata, &msm_rpmstats_fops);
+		if (!dent_rpmstats) {
+			pr_err("%s: ERROR rpmstats/rpm_stats debugfs_create_file	fail\n",
+					__func__);
+			return -ENOMEM;
+		}
+#endif
 	} else {
 		kfree(pdata);
 		return -EINVAL;
