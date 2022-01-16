@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -26,8 +26,6 @@
 #include <asm/atomic.h>
 #include "diagfwd_bridge.h"
 
-#define THRESHOLD_CLIENT_LIMIT	50
-
 /* Size of the USB buffers used for read and write*/
 #define USB_MAX_OUT_BUF 4096
 #define APPS_BUF_SIZE	4096
@@ -36,7 +34,7 @@
 
 #define DIAG_MAX_REQ_SIZE	(16 * 1024)
 #define DIAG_MAX_RSP_SIZE	(16 * 1024)
-#define APF_DIAG_PADDING	0
+#define APF_DIAG_PADDING	256
 /*
  * In the worst case, the HDLC buffer can be atmost twice the size of the
  * original packet. Add 3 bytes for 16 bit CRC (2 bytes) and a delimiter
@@ -408,7 +406,6 @@ struct diag_md_session_t {
 	int pid;
 	int peripheral_mask;
 	uint8_t hdlc_disabled;
-	uint8_t msg_mask_tbl_count;
 	struct timer_list hdlc_reset_timer;
 	struct diag_mask_info *msg_mask;
 	struct diag_mask_info *log_mask;
@@ -474,7 +471,6 @@ struct diagchar_dev {
 	wait_queue_head_t wait_q;
 	struct diag_client_map *client_map;
 	int *data_ready;
-	atomic_t data_ready_notif[THRESHOLD_CLIENT_LIMIT];
 	int num_clients;
 	int polling_reg_flag;
 	int use_device_tree;
@@ -634,7 +630,7 @@ void diag_cmd_remove_reg_by_pid(int pid);
 void diag_cmd_remove_reg_by_proc(int proc);
 int diag_cmd_chk_polling(struct diag_cmd_reg_entry_t *entry);
 int diag_mask_param(void);
-void diag_clear_masks(int pid);
+void diag_clear_masks(struct diag_md_session_t *info);
 
 void diag_record_stats(int type, int flag);
 
